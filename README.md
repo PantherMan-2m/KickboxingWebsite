@@ -1,4 +1,4 @@
-# Iron Tiger Kickboxing — Static Website
+# CNJ Boxing / Kick Boxing / Muay Thai — Static Website
 
 This is a fast, free-to-host static site for your gym.
 
