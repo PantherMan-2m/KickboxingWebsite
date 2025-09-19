@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Iron Tiger Kickboxing</title>
+  <meta name="description" content="Kickboxing gym in your city. Classes for beginners to fighters. First class free." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+<header class="site-header">
+  <div class="container nav">
+    <a class="logo" href="#home">🥊 Iron Tiger</a>
+    <button class="menu-toggle" aria-label="Toggle menu">☰</button>
+    <nav class="nav-links">
+      <a href="#classes">Classes</a>
+      <a href="#schedule">Schedule</a>
+      <a href="#coaches">Coaches</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#gallery">Gallery</a>
+      <a href="#contact" class="btn btn-sm">Contact</a>
+    </nav>
+  </div>
+</header>
+
+<main id="home">
+  <section class="hero container">
+    <div class="hero-text">
+      <h1>Kickboxing for Every Body</h1>
+      <p>Build power, speed, and confidence. First class is <strong>free</strong>—no experience needed.</p>
+      <div class="actions">
+        <a href="#schedule" class="btn">View Schedule</a>
+        <a href="#contact" class="btn btn-outline">Book a Trial</a>
+      </div>
+      <ul class="badges">
+        <li>Beginner friendly</li>
+        <li>Youth & Adults</li>
+        <li>Competitive team</li>
+      </ul>
+    </div>
+    <div class="hero-media">
+      <img src="images/hero.jpg" alt="Kickboxing training" />
+    </div>
+  </section>
+
+  <section id="classes" class="container section">
+    <h2>Classes</h2>
+    <div class="grid two">
+      <div class="card">
+        <h3>Fundamentals</h3>
+        <p>Footwork, stance, basic punches and kicks. Perfect for beginners.</p>
+        <ul>
+          <li>Mon/Wed/Fri</li>
+          <li>45–60 minutes</li>
+          <li>All fitness levels</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>All‑Levels</h3>
+        <p>Technical drills, padwork, conditioning. Options for every level.</p>
+        <ul>
+          <li>Weekdays</li>
+          <li>60 minutes</li>
+          <li>Gloves & wraps required</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Fighters</h3>
+        <p>Sparring, strategy, and fight prep. Invitation only.</p>
+        <ul>
+          <li>Tue/Thu</li>
+          <li>90 minutes</li>
+          <li>Mouthguard & shin guards</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Youth</h3>
+        <p>Confidence, coordination, and discipline in a fun, safe class.</p>
+        <ul>
+          <li>Tue/Thu</li>
+          <li>45 minutes</li>
+          <li>Ages 8–14</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="schedule" class="container section">
+    <h2>Schedule</h2>
+    <div class="scroll-x">
+      <table class="schedule">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Mon</th>
+            <th>Tue</th>
+            <th>Wed</th>
+            <th>Thu</th>
+            <th>Fri</th>
+            <th>Sat</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>06:00</td>
+            <td>All‑Levels</td>
+            <td></td>
+            <td>All‑Levels</td>
+            <td></td>
+            <td>All‑Levels</td>
+            <td>Open Gym</td>
+          </tr>
+          <tr>
+            <td>17:30</td>
+            <td>Fundamentals</td>
+            <td>Youth</td>
+            <td>Fundamentals</td>
+            <td>Youth</td>
+            <td>Fundamentals</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>19:00</td>
+            <td>All‑Levels</td>
+            <td>Fighters</td>
+            <td>All‑Levels</td>
+            <td>Fighters</td>
+            <td>All‑Levels</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">Public holidays: reduced schedule. Message us to confirm.</p>
+  </section>
+
+  <section id="coaches" class="container section">
+    <h2>Coaches</h2>
+    <div class="grid three">
+      <div class="coach card">
+        <img src="images/coach1.jpg" alt="Head Coach" />
+        <h3>Alex Mokoena</h3>
+        <p class="muted">Head Coach · 15+ years · SA Champion</p>
+        <p>Technical striking and efficient movement. Focus on safe progress for all levels.</p>
+      </div>
+      <div class="coach card">
+        <img src="images/coach2.jpg" alt="Coach" />
+        <h3>Sam Naidoo</h3>
+        <p class="muted">Coach · Strength & Conditioning</p>
+        <p>Build speed, power, and endurance with evidence‑based training.</p>
+      </div>
+      <div class="coach card">
+        <img src="images/coach3.jpg" alt="Youth Coach" />
+        <h3>Lebo Dlamini</h3>
+        <p class="muted">Youth Coach</p>
+        <p>Confidence and discipline through playful, structured sessions.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing" class="container section">
+    <h2>Pricing</h2>
+    <div class="grid three">
+      <div class="price card">
+        <h3>Drop‑in</h3>
+        <p class="price-tag">R120</p>
+        <p>One session. Gloves available to rent.</p>
+      </div>
+      <div class="price card highlight">
+        <h3>Unlimited</h3>
+        <p class="price-tag">R699 / mo</p>
+        <p>All classes. Cancel anytime.</p>
+      </div>
+      <div class="price card">
+        <h3>Youth</h3>
+        <p class="price-tag">R450 / mo</p>
+        <p>2 classes/week. School‑term aligned.</p>
+      </div>
+    </div>
+    <p class="muted">* Student & family discounts available. Enquire below.</p>
+  </section>
+
+  <section id="gallery" class="container section">
+    <h2>Gallery</h2>
+    <div class="grid three gallery">
+      <img src="images/gym1.jpg" alt="Gym photo 1" />
+      <img src="images/gym2.jpg" alt="Gym photo 2" />
+      <img src="images/gym3.jpg" alt="Gym photo 3" />
+    </div>
+  </section>
+
+  <section id="contact" class="container section">
+    <h2>Contact</h2>
+    <div class="grid two">
+      <form id="contactForm" class="card">
+        <label>Name<input type="text" name="name" required /></label>
+        <label>Email<input type="email" name="email" required /></label>
+        <label>Phone (optional)<input type="tel" name="phone" /></label>
+        <label>Message<textarea name="message" rows="4" required>Hi, I’d like to book a free trial.</textarea></label>
+        <button class="btn" type="submit">Send</button>
+        <p class="muted small" id="formStatus" role="status"></p>
+      </form>
+      <div class="card contact-card">
+        <h3>Visit Us</h3>
+        <p>123 Main Road, Johannesburg</p>
+        <p>Mon–Fri · 06:00–20:00 · Sat 08:00–12:00</p>
+        <p><a href="tel:+27-11-555-1234">+27 11 555 1234</a><br/>
+        <a href="mailto:info@irontiger.co.za">info@irontiger.co.za</a></p>
+        <iframe class="map" src="https://maps.google.com/maps?q=Johannesburg&t=&z=12&ie=UTF8&iwloc=&output=embed" loading="lazy" title="Map"></iframe>
+        <div class="socials">
+          <a href="#" aria-label="Instagram">Instagram</a>
+          <a href="#" aria-label="Facebook">Facebook</a>
+          <a href="#" aria-label="WhatsApp">WhatsApp</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© <span id="year"></span> Iron Tiger Kickboxing · Johannesburg, South Africa</p>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
