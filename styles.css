@@ -25,7 +25,94 @@ h2{font-size:28px;margin:0 0 18px}
 .grid.two{grid-template-columns:repeat(2,1fr)}
 .grid.three{grid-template-columns:repeat(3,1fr)}
 .card{background:linear-gradient(180deg,var(--card),#1a1b1f);border:1px solid var(--border);border-radius:16px;padding:18px}
-.coach img{width:100%;height:220px;object-fit:cover;border-radius:12px;margin-bottom:10px}
+.coach img{
+  width: 100%;
+  height: 220px;           /* Fixed height keeps card stable */
+  object-fit: cover;       /* Fill box */
+  object-position: 50% 25%; /* Move crop upward */
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+/* .gallery text added to cointrol gallery image crop */
+.gallery img { height:180px; object-fit:cover; object-position:center; }
+.gallery img[data-pos="top"]       { object-position: top; }
+.gallery img[data-pos="upper"]     { object-position: 50% 25%; }
+.gallery img[data-pos="high"]      { object-position: 50% 15%; }
+.gallery img[data-pos="left"]      { object-position: 20% 50%; }
+.gallery img[data-pos="right"]     { object-position: 80% 50%; }
+.contact-card a,
+.socials a {
+  color: #f17400;        /* bright orange */
+  text-decoration: none; /* optional: remove underline */
+  font-weight: 600;      /* optional: make it stand out */
+}
+.contact-card a:hover,
+.socials a {
+  text-decoration: underline;  /* add underline on hover */
+  color: #ff8c33;              /* lighter hover shade */
+}
+/* Form layout */
+#contactForm {
+  display: grid;
+  gap: 12px;
+}
+
+#contactForm label {
+  display: block;            /* label on its own line */
+  font-weight: 600;
+  margin-bottom: 4px;        /* spacing above each input */
+  color: var(--text);
+}
+
+/* Make inputs appear on the next line, full width */
+#contactForm input,
+#contactForm textarea {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #121317;
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+/* Focus states for accessibility */
+#contactForm input:focus,
+#contactForm textarea:focus {
+  border-color: #f17400;
+  box-shadow: 0 0 0 3px rgba(241, 116, 0, 0.2);
+  background: #101115;
+}
+
+/* Placeholder style (optional, subtle) */
+#contactForm ::placeholder {
+  color: var(--muted);
+}
+
+/* Make the submit button span full width and match brand */
+#contactForm .btn {
+  width: 100%;
+  text-align: center;
+}
+
+/* Status text */
+#contactForm #formStatus {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+/* Optional: error/success helpers you can set from JS */
+#contactForm .is-error {
+  border-color: #ff4d4f;
+  box-shadow: 0 0 0 3px rgba(255,77,79,.15);
+}
+#contactForm .is-success {
+  border-color: #28a745;
+  box-shadow: 0 0 0 3px rgba(40,167,69,.15);
+}
+
 .price-tag{font-size:28px;font-weight:800;margin:.2em 0}
 .price.highlight{border-color:var(--brand)}
 .gallery img{width:100%;height:180px;object-fit:cover;border-radius:12px}

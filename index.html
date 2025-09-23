@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Iron Tiger Kickboxing</title>
-  <meta name="description" content="Kickboxing gym in your city. Classes for beginners to fighters. First class free." />
+  <title>CJN Boxing Academy</title>
+  <meta name="description" content="Boxing, kickboxing and Muay Thai gym. Classes for beginners to fighters. First two classes free." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
 <body>
 <header class="site-header">
   <div class="container nav">
-    <a class="logo" href="#home">🥊 CNJ Boxing / Kick Boxing / Muay Thai </a>
+    <a class="logo" href="#home">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
     <button class="menu-toggle" aria-label="Toggle menu">☰</button>
     <nav class="nav-links">
       <a href="#classes">Classes</a>
@@ -46,7 +46,7 @@
       </ul>
     </div>
     <div class="hero-media">
-      <img src="images/hero.jpg" alt="Kickboxing training" />
+      <img src="images/logo.jpg" alt="Kickboxing training" />
     </div>
   </section>
 
@@ -137,22 +137,16 @@
     <h2>Coaches</h2>
     <div class="grid three">
       <div class="coach card">
-        <img src="images/coach1.jpg" alt="Head Coach" />
-        <h3>Alex Mokoena</h3>
-        <p class="muted">Head Coach · 15+ years · SA Champion</p>
-        <p>Technical striking and efficient movement. Focus on safe progress for all levels.</p>
+        <img src="images/ChrissProfile.jpg" alt="Head Coach" />
+        <h3>Cristiano J Ndomabassy</h3>
+        <p class="muted">Head Coach · 15+ years · Multiple Titles</p>
+        <p>Build speed, power, endurance and resilience. Work hard while learning boxing, kick boxing or muay Thai.</p>
       </div>
       <div class="coach card">
         <img src="images/coach2.jpg" alt="Coach" />
-        <h3>Sam Naidoo</h3>
-        <p class="muted">Coach · Strength & Conditioning</p>
-        <p>Build speed, power, and endurance with evidence‑based training.</p>
-      </div>
-      <div class="coach card">
-        <img src="images/coach3.jpg" alt="Youth Coach" />
-        <h3>Lebo Dlamini</h3>
-        <p class="muted">Youth Coach</p>
-        <p>Confidence and discipline through playful, structured sessions.</p>
+        <h3>Giovanni Matthews</h3>
+        <p class="muted">Coach · Technical · Brainwork</p>
+        <p>Technical striking and efficient movement. Focus on footwork, head movement, technical striking and blocking.</p>
       </div>
     </div>
   </section>
@@ -162,29 +156,35 @@
     <div class="grid three">
       <div class="price card">
         <h3>Drop‑in</h3>
-        <p class="price-tag">R120</p>
-        <p>One session. Gloves available to rent.</p>
+        <p class="price-tag">R150</p>
+        <p>One session. Gloves available.</p>
+      </div>
+      <div class="price card">
+        <h3>One Classes / week</h3>
+        <p class="price-tag">R550 / mo</p>
+        <p>Any class. Cancel a month in advance.</p>
       </div>
       <div class="price card highlight">
         <h3>Unlimited</h3>
-        <p class="price-tag">R699 / mo</p>
-        <p>All classes. Cancel anytime.</p>
-      </div>
-      <div class="price card">
-        <h3>Youth</h3>
-        <p class="price-tag">R450 / mo</p>
-        <p>2 classes/week. School‑term aligned.</p>
+        <p class="price-tag">R800 / mo</p>
+        <p>All Classes. Cancel a month in advance.</p>
       </div>
     </div>
-    <p class="muted">* Student & family discounts available. Enquire below.</p>
+    <p class="muted">* Family discounts available. Enquire below.</p>
   </section>
 
   <section id="gallery" class="container section">
     <h2>Gallery</h2>
     <div class="grid three gallery">
-      <img src="images/gym1.jpg" alt="Gym photo 1" />
-      <img src="images/gym2.jpg" alt="Gym photo 2" />
-      <img src="images/gym3.jpg" alt="Gym photo 3" />
+      <img src="images/Gal0.jpg" alt="Gym photo 1" />
+      <img src="images/Gal2.jpg" alt="Gym photo 2" />
+      <img src="images/Gal2half.jpg" alt="Group of seven people standing and kneeling on a red mat in a martial arts gym, some wearing boxing gloves and athletic clothing, one person holding a championship belt. The mood is friendly and celebratory." data-pos="upper"/>
+      <img src="images/Gal3.jpg" alt="Gym photo 4" />
+      <img src="images/Gal4.jpg" alt="Gym photo 5" />
+      <img src="images/Gal7.jpg" alt="Gym photo 6" />
+      <img src="images/Gal5.jpg" alt="Gym photo 7" />
+      <img src="images/Gal8.jpg" alt="Gym photo 8" data-pos="upper"/>
+      <img src="images/Gal9.jpg" alt="Gym photo 9" data-pos="upper"/>
     </div>
   </section>
 
@@ -192,20 +192,28 @@
     <h2>Contact</h2>
     <div class="grid two">
       <form id="contactForm" class="card">
-        <label>Name<input type="text" name="name" required /></label>
-        <label>Email<input type="email" name="email" required /></label>
-        <label>Phone (optional)<input type="tel" name="phone" /></label>
-        <label>Message<textarea name="message" rows="4" required>Hi, I’d like to book a free trial.</textarea></label>
+        <label for="name">Name</label>
+        <input id="name" type="text" name="name" required />
+
+        <label for="email">Email</label>
+        <input id="email" type="email" name="email" required />
+
+        <label for="phone">Phone (optional)</label>
+        <input id="phone" type="tel" name="phone" />
+
+        <label for="message">Message</label>
+        <textarea id="message" name="message" rows="4" required placeholder="Hi, I’d like to book a free trial."></textarea>
+
         <button class="btn" type="submit">Send</button>
         <p class="muted small" id="formStatus" role="status"></p>
       </form>
       <div class="card contact-card">
         <h3>Visit Us</h3>
-        <p>123 Main Road, Johannesburg</p>
-        <p>Mon–Fri · 06:00–20:00 · Sat 08:00–12:00</p>
-        <p><a href="tel:+27-11-555-1234">+27 11 555 1234</a><br/>
-        <a href="mailto:info@irontiger.co.za">info@irontiger.co.za</a></p>
-        <iframe class="map" src="https://maps.google.com/maps?q=Johannesburg&t=&z=12&ie=UTF8&iwloc=&output=embed" loading="lazy" title="Map"></iframe>
+        <p>Fountain Square, Caledon St, Somerset west</p>
+        <p>Tue–Thu · 19:15–20:30 · Sat 10:00–11:00</p>
+        <p><a href="tel:+27-68-216-3787">+27 68 216 3787</a><br/>
+        <a href="mailto:cnedlox@gmail.com">cnedlox@gmail.com</a></p>
+        <iframe class="map" src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3304.4935317087425!2d18.847737712126456!3d-34.08249523004847!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x1dcdb57e9acfd291%3A0xf866fbe6f2264ac5!2sWest%20Workout%20Gym!5e0!3m2!1sen!2sza!4v1758624661882!5m2!1sen!2sza" loading="lazy" title="Map"></iframe>
         <div class="socials">
           <a href="#" aria-label="Instagram">Instagram</a>
           <a href="#" aria-label="Facebook">Facebook</a>
@@ -218,7 +226,7 @@
 
 <footer class="site-footer">
   <div class="container">
-    <p>© <span id="year"></span> Iron Tiger Kickboxing · Johannesburg, South Africa</p>
+    <p>© <span id="year"></span> CJN Boxing Academy · Somerset West, South Africa</p>
   </div>
 </footer>
 
