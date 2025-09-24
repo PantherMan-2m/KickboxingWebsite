@@ -134,10 +134,92 @@ h2{font-size:28px;margin:0 0 18px}
   .hero{grid-template-columns:1fr}
   .grid.two{grid-template-columns:1fr}
   .grid.three{grid-template-columns:1fr 1fr}
-  .nav-links{display:none}
   .menu-toggle{display:block}
 }
 @media (max-width: 600px){
   .grid.three{grid-template-columns:1fr}
   .hero h1{font-size:34px}
 }
+
+/* Header update for reaperance on scroll */
+/* Header show/hide animation */
+.site-header{
+  position: fixed;     /* changed from sticky */
+  top: 0; left: 0; right: 0;
+  z-index: 1000;
+  transform: translateY(0);
+  opacity: 1;
+  transition: transform .35s ease, opacity .35s ease;
+  will-change: transform;
+}
+.site-header.hide{
+  transform: translateY(-100%);
+  opacity: .98;        /* or 0 */
+}
+
+/* add space below a fixed 64px header */
+main { padding-top: 64px; }
+
+.site-header:not(.hide) {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+/* end header update */
+
+/* menu-nav update placed to override previous */
+/* Prevent sideways scroll */
+html, body { overflow-x: hidden; }
+
+/* Mobile dropdown with animation */
+@media (max-width: 900px){
+  .nav { position: relative; }
+
+  .nav-links{
+    /* existing dropdown styles */
+    position: absolute;
+    top: 64px; left: 0; right: 0;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(11,11,12,.95);
+    backdrop-filter: saturate(140%) blur(8px);
+    border-bottom: 1px solid var(--border);
+    max-height: 0;            /* collapsed */
+    overflow: hidden;         /* hide while collapsing */
+    opacity: 0;               /* fade */
+    transform: translateY(-8px); /* slight slide up */
+    pointer-events: none;     /* not clickable while closed */
+    z-index: 60;
+
+    /* animation */
+    transition:
+      max-height 1s ease,
+      opacity 1s ease,
+      transform 1s ease;
+  }
+
+  .nav-links.open{
+    display: flex;            /* ensure flex when open */
+    max-height: 80vh;         /* expanded height limit */
+    opacity: 1;               /* fade in */
+    transform: translateY(0); /* slide down */
+    pointer-events: auto;     /* clickable */
+  }
+
+  .nav-links a{
+    padding: 10px 8px;
+    width: 100%;
+  }
+
+  /* Respect users who prefer reduced motion */
+  @media (prefers-reduced-motion: reduce){
+    .nav-links{
+      transition: none;
+    }
+  }
+}
+
+/* Optional: lock body scroll when menu open (from earlier) */
+.body-lock { overflow: hidden; }
+
+/* End menu-nav update */
