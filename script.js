@@ -10,7 +10,11 @@ btn.addEventListener('click', () => {
 
 // Close menu when a link is clicked (nice UX)
 document.querySelectorAll('.nav-links a').forEach(a => {
-  a.addEventListener('click', () => nav.classList.remove('open'));
+  a.addEventListener('click', () => {
+    nav.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('body-lock');
+  });
 });
 
 // Close the nav menu if user scrolls while it's open

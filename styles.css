@@ -25,16 +25,92 @@ h2{font-size:28px;margin:0 0 18px}
 .grid.two{grid-template-columns:repeat(2,1fr)}
 .grid.three{grid-template-columns:repeat(3,1fr)}
 .card{background:linear-gradient(180deg,var(--card),#1a1b1f);border:1px solid var(--border);border-radius:16px;padding:18px}
-.coach img{
+.section-intro {
+  color: var(--muted);
+  margin-top: -8px;
+  margin-bottom: 28px;
+  font-size: 16px;
+}
+
+.coaches-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.coach-card {
+  overflow: hidden;
+  border: 1px solid rgba(255, 183, 3, 0.35);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #101114, #0c0d0f);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.coach-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  border-color: rgba(255, 183, 3, 0.6);
+}
+
+.coach-card img {
   width: 100%;
-  height: 220px;           /* Fixed height keeps card stable */
-  object-fit: cover;       /* Fill box */
-  object-position: 50% 25%; /* Move crop upward */
-  border-radius: 12px;
-  margin-bottom: 10px;
+  aspect-ratio: 4 / 5;
+  height: auto;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+}
+
+.coach-content {
+  padding: 22px;
+  background: rgba(8, 9, 11, 0.96);
+}
+
+.coach-content h3 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.coach-role {
+  margin: 0;
+  color: var(--brand-2);
+  font-weight: 500;
+}
+
+.coach-line {
+  width: 42px;
+  height: 2px;
+  background: var(--brand-2);
+  margin: 18px 0;
+}
+
+.coach-content p:last-child {
+  margin-bottom: 0;
+  color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .coaches-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coach-card img {
+    aspect-ratio: 4 / 5;
+  }
+}
+
+@media (max-width: 600px) {
+  .coach-card img {
+    aspect-ratio: 3 / 4;
+  }
+
+  .coach-content h3 {
+    font-size: 21px;
+  }
 }
 /* .gallery text added to cointrol gallery image crop */
-.gallery img { height:180px; object-fit:cover; object-position:center; }
 .gallery img[data-pos="top"]       { object-position: top; }
 .gallery img[data-pos="upper"]     { object-position: 50% 25%; }
 .gallery img[data-pos="high"]      { object-position: 50% 15%; }
@@ -47,9 +123,9 @@ h2{font-size:28px;margin:0 0 18px}
   font-weight: 600;      /* optional: make it stand out */
 }
 .contact-card a:hover,
-.socials a {
-  text-decoration: underline;  /* add underline on hover */
-  color: #ff8c33;              /* lighter hover shade */
+.socials a:hover {
+  text-decoration: underline;
+  color: #ff8c33;
 }
 /* Form layout */
 #contactForm {
@@ -116,6 +192,13 @@ h2{font-size:28px;margin:0 0 18px}
 .price-tag{font-size:28px;font-weight:800;margin:.2em 0}
 .price.highlight{border-color:var(--brand)}
 .gallery img{width:100%;height:180px;object-fit:cover;border-radius:12px}
+.gallery img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 12px;
+}
 .btn{display:inline-block;background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#111;padding:10px 14px;border-radius:999px;text-decoration:none;font-weight:700;border:none;cursor:pointer}
 .btn:hover{filter:brightness(1.05)}
 .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}
