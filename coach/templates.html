@@ -12,7 +12,7 @@
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
 </head>
 <body>
-<header class="site-header">
+<header class="site-header app">
   <div class="container nav">
     <a class="logo" href="/">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
     <nav class="nav-links">
@@ -56,14 +56,16 @@
 
   <section class="container section">
     <h2>Current weekly schedule</h2>
-    <table class="schedule" id="templatesTable">
-      <thead>
-        <tr><th>Day</th><th>Time</th><th>Class</th></tr>
-      </thead>
-      <tbody id="templatesBody">
-        <tr><td colspan="3">Loading…</td></tr>
-      </tbody>
-    </table>
+    <div class="scroll-x">
+      <table class="schedule" id="templatesTable">
+        <thead>
+          <tr><th>Day</th><th>Time</th><th>Class</th></tr>
+        </thead>
+        <tbody id="templatesBody">
+          <tr><td colspan="3">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 </main>
 

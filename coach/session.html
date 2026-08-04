@@ -12,7 +12,7 @@
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
 </head>
 <body>
-<header class="site-header">
+<header class="site-header app">
   <div class="container nav">
     <a class="logo" href="/">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
     <nav class="nav-links">
@@ -86,6 +86,7 @@
     }
 
     rosterContainer.innerHTML = `
+      <div class="scroll-x">
       <table class="schedule">
         <thead><tr><th>Name</th><th>Present</th><th>Absent</th><th>Excused</th></tr></thead>
         <tbody>
@@ -101,6 +102,7 @@
           `).join('')}
         </tbody>
       </table>
+      </div>
     `;
   }
 

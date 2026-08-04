@@ -1,5 +1,8 @@
 *{box-sizing:border-box}html{scroll-behavior:smooth}
 :root{
+  color-scheme: dark; /* site is dark-only; tells the browser to render native controls
+    (date picker icon, checkbox/radio chrome, scrollbars) with dark-aware defaults
+    instead of near-invisible light-mode ones */
   --bg:#0b0b0c; --text:#e8e9ea; --muted:#a6a8ab; --card:#15161a;
   --brand:#ff3d00; --brand-2:#ffb703; --border:#24262b;
 }
@@ -19,6 +22,8 @@ body{margin:0;background:linear-gradient(180deg,#0b0b0c 0%,#0f1115 100%);color:v
 .actions{display:flex;gap:12px;margin:18px 0 8px}
 .badges{display:flex;gap:12px;flex-wrap:wrap;padding:0;margin:10px 0;list-style:none}
 .badges li{background:linear-gradient(90deg,var(--card),#1b1d22);border:1px solid var(--border);padding:6px 10px;border-radius:999px;color:var(--muted);font-size:13px}
+.badges li a{color:inherit;text-decoration:none;font-weight:600}
+.badges li a:hover{color:var(--text)}
 .section{padding:56px 0}
 h2{font-size:28px;margin:0 0 18px}
 .grid{display:grid;gap:18px}
@@ -301,6 +306,23 @@ html, body { overflow-x: hidden; }
     opacity: 1;               /* fade in */
     transform: translateY(0); /* slide down */
     pointer-events: auto;     /* clickable */
+  }
+
+  /* Coach/student utility pages (login, dashboards, roster, etc.) don't load the
+     hamburger-menu JS that toggles .nav-links.open above -- so on these pages the nav
+     must stay visible and just wrap, instead of collapsing into an unreachable menu. */
+  .site-header.app .nav-links{
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-height: none;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    background: none;
+    backdrop-filter: none;
+    border-bottom: none;
+    padding: 10px 0;
   }
 
   .nav-links a{
