@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Manage students · CJN Boxing Academy</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+<header class="site-header">
+  <div class="container nav">
+    <a class="logo" href="/">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
+    <nav class="nav-links">
+      <a href="/coach/dashboard.html">Dashboard</a>
+      <a href="/coach/students.html">Students</a>
+      <a href="#" id="logoutLink">Log out</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="container section">
+    <h2>Add a student</h2>
+    <form id="addStudentForm" class="card form" style="max-width:420px">
+      <label for="name">Name</label>
+      <input id="name" type="text" name="name" required />
+
+      <label for="email">Email</label>
+      <input id="email" type="email" name="email" required />
+
+      <button class="btn" type="submit">Add student</button>
+      <p class="form-status" id="formStatus" role="status"></p>
+    </form>
+  </section>
+
+  <section class="container section">
+    <h2>Roster</h2>
+    <table class="schedule" id="rosterTable">
+      <thead>
+        <tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody id="rosterBody">
+        <tr><td colspan="4">Loading…</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© <span id="year"></span> CJN Boxing Academy · Somerset West, South Africa</p>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login.html';
+  });
+
+  const rosterBody = document.getElementById('rosterBody');
+
+  function renderRoster(students) {
+    if (students.length === 0) {
+      rosterBody.innerHTML = '<tr><td colspan="4">No students yet.</td></tr>';
+      return;
+    }
+    rosterBody.innerHTML = students.map((s) => `
+      <tr>
+        <td>${escapeHtml(s.name)}</td>
+        <td>${escapeHtml(s.email)}</td>
+        <td>${s.status}</td>
+        <td><button class="btn btn-outline btn-sm" data-id="${s.id}" data-status="${s.status === 'active' ? 'inactive' : 'active'}">
+          ${s.status === 'active' ? 'Deactivate' : 'Activate'}
+        </button></td>
+      </tr>
+    `).join('');
+
+    rosterBody.querySelectorAll('button[data-id]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          await fetch(`/api/coach/students/${btn.dataset.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: btn.dataset.status }),
+          });
+          await loadRoster();
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function loadRoster() {
+    const response = await fetch('/api/coach/students');
+    const data = await response.json();
+    if (data.ok) renderRoster(data.students);
+  }
+
+  document.getElementById('addStudentForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const status = document.getElementById('formStatus');
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    status.textContent = 'Adding student…';
+    submitButton.disabled = true;
+
+    try {
+      const response = await fetch('/api/coach/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.name.value, email: form.email.value }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        status.textContent = data.error || 'Could not add student.';
+        return;
+      }
+
+      if (data.emailSent) {
+        status.textContent = `${data.student.name} added -- invite email sent.`;
+      } else {
+        status.textContent = `${data.student.name} added -- invite email failed to send. Temporary password: ${data.tempPassword} (share this with them directly).`;
+      }
+      form.reset();
+      await loadRoster();
+    } catch (error) {
+      status.textContent = 'Sorry, something went wrong. Please try again.';
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  loadRoster();
+</script>
+</body>
+</html>
