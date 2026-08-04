@@ -29,7 +29,7 @@ ${message}
     },
     body: JSON.stringify({
       from: 'CJN Website <website@cjnacademy.com>',
-      to: ['cnedlox@gmail.com'],
+      to: ['info@cjnacademy.com'],
       subject: 'New CJN trial class enquiry',
       text: emailBody,
       reply_to: email,
