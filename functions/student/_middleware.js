@@ -5,8 +5,8 @@ export async function onRequest(context) {
   if (!session) {
     return Response.redirect(new URL('/login.html', context.request.url), 302);
   }
-  if (session.user.role !== 'coach') {
-    return Response.redirect(new URL('/student/dashboard.html', context.request.url), 302);
+  if (session.user.role !== 'student') {
+    return Response.redirect(new URL('/coach/dashboard.html', context.request.url), 302);
   }
   if (session.user.mustChangePassword) {
     return Response.redirect(new URL('/change-password.html', context.request.url), 302);

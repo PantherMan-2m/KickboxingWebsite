@@ -127,13 +127,17 @@ h2{font-size:28px;margin:0 0 18px}
   text-decoration: underline;
   color: #ff8c33;
 }
-/* Form layout */
-#contactForm {
+/* Form layout -- .form is the general-purpose class (login, add-student, attendance,
+   etc.); #contactForm is kept alongside it so the existing contact form (which also
+   carries class="form") isn't duplicated or broken. */
+#contactForm,
+.form {
   display: grid;
   gap: 12px;
 }
 
-#contactForm label {
+#contactForm label,
+.form label {
   display: block;            /* label on its own line */
   font-weight: 600;
   margin-bottom: 4px;        /* spacing above each input */
@@ -142,7 +146,10 @@ h2{font-size:28px;margin:0 0 18px}
 
 /* Make inputs appear on the next line, full width */
 #contactForm input,
-#contactForm textarea {
+#contactForm textarea,
+.form input,
+.form textarea,
+.form select {
   display: block;
   width: 100%;
   padding: 10px 12px;
@@ -156,35 +163,43 @@ h2{font-size:28px;margin:0 0 18px}
 
 /* Focus states for accessibility */
 #contactForm input:focus,
-#contactForm textarea:focus {
+#contactForm textarea:focus,
+.form input:focus,
+.form textarea:focus,
+.form select:focus {
   border-color: #f17400;
   box-shadow: 0 0 0 3px rgba(241, 116, 0, 0.2);
   background: #101115;
 }
 
 /* Placeholder style (optional, subtle) */
-#contactForm ::placeholder {
+#contactForm ::placeholder,
+.form ::placeholder {
   color: var(--muted);
 }
 
 /* Make the submit button span full width and match brand */
-#contactForm .btn {
+#contactForm .btn,
+.form .btn {
   width: 100%;
   text-align: center;
 }
 
 /* Status text */
-#contactForm #formStatus {
+#contactForm #formStatus,
+.form .form-status {
   margin-top: 6px;
   color: var(--muted);
 }
 
 /* Optional: error/success helpers you can set from JS */
-#contactForm .is-error {
+#contactForm .is-error,
+.form .is-error {
   border-color: #ff4d4f;
   box-shadow: 0 0 0 3px rgba(255,77,79,.15);
 }
-#contactForm .is-success {
+#contactForm .is-success,
+.form .is-success {
   border-color: #28a745;
   box-shadow: 0 0 0 3px rgba(40,167,69,.15);
 }

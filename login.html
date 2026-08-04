@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login · CJN Boxing Academy</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+<header class="site-header">
+  <div class="container nav">
+    <a class="logo" href="/">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
+  </div>
+</header>
+
+<main>
+  <section class="container section" style="max-width:420px">
+    <h2>Log in</h2>
+    <form id="loginForm" class="card form">
+      <label for="email">Email</label>
+      <input id="email" type="email" name="email" required autocomplete="username" />
+
+      <label for="password">Password</label>
+      <input id="password" type="password" name="password" required autocomplete="current-password" />
+
+      <button class="btn" type="submit">Log in</button>
+      <p class="form-status" id="formStatus" role="status"></p>
+    </form>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© <span id="year"></span> CJN Boxing Academy · Somerset West, South Africa</p>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const status = document.getElementById('formStatus');
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    status.textContent = 'Logging in…';
+    submitButton.disabled = true;
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: form.email.value,
+          password: form.password.value,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        status.textContent = data.error || 'Login failed. Please try again.';
+        return;
+      }
+
+      if (data.user.mustChangePassword) {
+        window.location.href = '/change-password.html';
+      } else if (data.user.role === 'coach') {
+        window.location.href = '/coach/dashboard.html';
+      } else {
+        window.location.href = '/student/dashboard.html';
+      }
+    } catch (error) {
+      status.textContent = 'Sorry, something went wrong. Please try again.';
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

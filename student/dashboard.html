@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My attendance · CJN Boxing Academy</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+<header class="site-header">
+  <div class="container nav">
+    <a class="logo" href="/">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
+    <nav class="nav-links">
+      <a href="#" id="logoutLink">Log out</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="container section">
+    <h2>My attendance</h2>
+    <p class="muted">Your attendance history will appear here.</p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© <span id="year"></span> CJN Boxing Academy · Somerset West, South Africa</p>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login.html';
+  });
+</script>
+</body>
+</html>
