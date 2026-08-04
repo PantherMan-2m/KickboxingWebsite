@@ -1,8 +1,8 @@
 # Coach/Student Login & Attendance System
 
-**Status**: Phase 1 (2026-08-04) and Phase 2 (self-signup + approval) complete and live.
-This is a living document — update it (don't replace it) as Phase 3 lands. See
-`TODO.md` (outer folder) for what's not built yet.
+**Status**: Phase 1, Phase 2 (self-signup + approval), and Phase 3 (class RSVPs)
+complete and live (2026-08-04). This is a living document — update it (don't replace it)
+as new features land. See `TODO.md` (outer folder) for what's not built yet.
 
 This doc has two halves: **Part 1** explains what the system does and how to use it in
 plain English. **Part 2** is the technical reference — schema, endpoints, security
@@ -15,9 +15,9 @@ mechanics — for whoever (human or AI) needs to modify the code later.
 ## Who can do what
 
 - **Coaches** can: manage the student roster, define the weekly class schedule, create
-  one-off extra sessions, and mark attendance.
-- **Students** can: log in and see their own attendance history, or (if they don't have
-  an account yet) request one. They can't yet RSVP to classes (that's Phase 3, see bottom).
+  one-off extra sessions, mark attendance, and see who's RSVP'd "going" to a class.
+- **Students** can: log in, see their own attendance history, RSVP to upcoming classes,
+  or (if they don't have an account yet) request one.
 
 ## Logging in
 
@@ -66,14 +66,23 @@ back, follow up with a coach directly.
    (e.g. an extra Friday class) without touching the weekly template. Either way, this
    creates a `class_sessions` row you can then open to mark attendance.
 6. **Marking attendance** (`/coach/session.html?id=...`) — shows the full active student
-   roster with present/absent/excused radio buttons per student (defaults to absent).
-   Save writes the whole roster at once. You can reopen a session later and it'll
-   pre-fill from whatever was last saved, so amending attendance after the fact is safe.
+   roster with an RSVP column (✓ Going if that student RSVP'd for this date's class) next
+   to present/absent/excused radio buttons per student (defaults to absent). The RSVP
+   column is only ever populated for sessions created from a weekly template — one-off
+   sessions have no RSVPs to show, since students can only RSVP to the recurring
+   schedule (see "What's deliberately not built yet"). Save writes the whole roster at
+   once. You can reopen a session later and it'll pre-fill from whatever was last saved,
+   so amending attendance after the fact is safe.
 
 ## Student walkthrough
 
 Log in → lands on `/student/dashboard.html` → see a table of every session you've been
-marked in, with date, class name, and status.
+marked in, with date, class name, and status. The **Upcoming classes**
+(`/student/upcoming.html`) nav link shows the next 7 days of recurring weekly classes,
+each with an "I'm going" button — tap it to RSVP, tap again to cancel. This is just a
+heads-up for the coach; it doesn't create or replace an actual attendance record, and
+you're not locked out of a class you didn't RSVP to (or penalized for RSVPing and not
+showing).
 
 ## Bootstrapping a coach account
 
@@ -139,7 +148,8 @@ Node would remove the need for the pin.
 
 ## Database schema
 
-Full DDL lives in `migrations/0001_initial.sql`. Five tables:
+Full DDL lives in `migrations/0001_initial.sql` and `migrations/0002_session_rsvps.sql`.
+Six tables:
 
 - **`users`** — coaches and students both live here, distinguished by `role` ('coach'/
   'student'). `status` ('active'/'inactive'/'pending' — 'pending' is a self-signup
@@ -161,6 +171,16 @@ Full DDL lives in `migrations/0001_initial.sql`. Five tables:
   roster when a coach saves (not just who was present) — this is what makes "did this
   student attend" and "reopen and amend" both simple queries instead of needing to infer
   absence from missing rows.
+- **`session_rsvps`** — a student's "going" intent for an upcoming occurrence of a
+  weekly class. Keyed to `(template_id, session_date, user_id)` rather than a
+  `class_sessions` row, because a session usually doesn't exist yet at RSVP time (the
+  coach creates it later via the Attendance page) — RSVPing is a pure read/write against
+  the template + date, no session gets silently created as a side effect. Row existence
+  = going; un-RSVPing deletes the row rather than tracking a "not going" state.
+  Deliberately separate from `attendance`, since RSVP intent and actual attendance are
+  different facts that can disagree (someone RSVPs then doesn't show, or shows without
+  RSVPing). One-off sessions (`class_sessions.template_id IS NULL`) have no way to be
+  RSVP'd to.
 
 ## Auth mechanics
 
@@ -195,6 +215,9 @@ Full DDL lives in `migrations/0001_initial.sql`. Five tables:
   handler files (confirmed working in production, not just assumed).
 - `functions/api/_utils/email.js` — thin Resend wrapper, deliberately separate from the
   pre-existing `functions/api/contact.js` so that already-working file stays untouched.
+- `functions/api/_utils/dates.js` — `isValidDate`, `dayOfWeekFor`, `todayIso`,
+  `addDaysIso`. Used by both `coach/sessions.js` (matching a date to a weekly template)
+  and `student/upcoming.js` (projecting the next 7 days).
 
 ## API reference
 
@@ -215,6 +238,8 @@ Full DDL lives in `migrations/0001_initial.sql`. Five tables:
 | `/api/coach/sessions/:id` | GET | coach | session detail + roster merged with existing attendance |
 | `/api/coach/mark-attendance` | POST | coach | `{sessionId,records:[{userId,status}]}`, atomic via `D1Database.batch()` |
 | `/api/student/attendance` | GET | student | own history only |
+| `/api/student/upcoming` | GET | student | next 7 days of weekly-template classes, merged with own RSVPs |
+| `/api/student/rsvp` | POST | student | `{templateId,date,going}` → insert/delete own `session_rsvps` row |
 
 ## Frontend notes
 
@@ -236,15 +261,15 @@ Full DDL lives in `migrations/0001_initial.sql`. Five tables:
   pattern (toggle button, `.nav-links.open` class, closes on link-click or scroll, locks
   body scroll while open) — each page has its own copy of that JS since there's no
   shared module system.
-- All four new tables (roster, weekly schedule, session roster, student history) wrap in
-  `.scroll-x` like the original schedule table, for mobile horizontal scrolling.
+- Every new table (roster, weekly schedule, session roster, student history, upcoming
+  classes) wraps in `.scroll-x` like the original schedule table, for mobile horizontal
+  scrolling.
 
-## What's deliberately not built yet (Phase 3)
+## What's deliberately not built yet
 
-- **Phase 3**: students browse the upcoming week and mark themselves "going"; coach's
-  session view shows RSVPs alongside actual attendance. Needs a new `session_rsvps`
-  table — deliberately not folded into `attendance`, since RSVP intent and actual
-  attendance are different facts that can disagree (someone RSVPs then doesn't show).
+- RSVPs only cover the recurring weekly schedule, not one-off/extra sessions — those
+  have no `class_templates` row to key an RSVP off of, and are typically announced and
+  created by the coach same-day anyway. Low priority to extend unless it comes up.
 - No self-service "forgot password" flow (coach/admin resets manually via SQL, see
   "Common maintenance tasks").
 - No IP-based rate limiting on `/api/auth/login`, only the per-account lockout above.
