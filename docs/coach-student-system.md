@@ -1,7 +1,8 @@
 # Coach/Student Login & Attendance System
 
-**Status**: Phase 1 complete and live (2026-08-04). This is a living document — update it
-(don't replace it) as Phase 2/3 land. See `TODO.md` (outer folder) for what's not built yet.
+**Status**: Phase 1 (2026-08-04) and Phase 2 (self-signup + approval) complete and live.
+This is a living document — update it (don't replace it) as Phase 3 lands. See
+`TODO.md` (outer folder) for what's not built yet.
 
 This doc has two halves: **Part 1** explains what the system does and how to use it in
 plain English. **Part 2** is the technical reference — schema, endpoints, security
@@ -15,8 +16,8 @@ mechanics — for whoever (human or AI) needs to modify the code later.
 
 - **Coaches** can: manage the student roster, define the weekly class schedule, create
   one-off extra sessions, and mark attendance.
-- **Students** can: log in and see their own attendance history. That's it for now —
-  they can't yet self-register or RSVP to classes (that's Phase 2/3, see bottom).
+- **Students** can: log in and see their own attendance history, or (if they don't have
+  an account yet) request one. They can't yet RSVP to classes (that's Phase 3, see bottom).
 
 ## Logging in
 
@@ -34,6 +35,15 @@ can't be used to figure out whether an account exists at all). It unlocks automa
 after 15 minutes; there's no manual unlock UI yet. If you need to force it open sooner,
 see "Common maintenance tasks" below.
 
+## Requesting an account
+
+Don't have an account yet? Go to `cjnacademy.com/request-account.html` (also linked from
+the login page) and submit your name + email. This doesn't create a working account
+immediately — it creates a **pending** request that a coach has to approve from the
+Requests page. You'll get an email with a temporary password once that happens. There's
+no signal on the request page itself either way (approved or not), so if you don't hear
+back, follow up with a coach directly.
+
 ## Coach walkthrough
 
 1. **Dashboard** (`/coach/dashboard.html`) — landing page with shortcuts to everything else.
@@ -43,14 +53,19 @@ see "Common maintenance tasks" below.
    hand it over directly. You can also deactivate/reactivate a student here (deactivating
    removes them from future attendance-marking rosters, but keeps their history intact —
    nothing is ever hard-deleted).
-3. **Schedule** (`/coach/templates.html`) — define the recurring weekly classes (day,
+3. **Requests** (`/coach/requests.html`) — anyone who submitted the public "request an
+   account" form shows up here. **Approve** activates their account and emails a
+   temporary password (same mechanics as adding a student directly, including the
+   on-screen fallback if the email fails). **Reject** deletes the request outright —
+   there's no "rejected" state to revisit, so only reject requests you're sure about.
+4. **Schedule** (`/coach/templates.html`) — define the recurring weekly classes (day,
    time, name). This is the *template*, not actual dated sessions.
-4. **Attendance** (`/coach/attendance.html`) — pick a date. If that date matches a
+5. **Attendance** (`/coach/attendance.html`) — pick a date. If that date matches a
    weekly template (e.g. it's a Tuesday and you have a Tuesday class), you'll see a
    "Create session" button for it. You can also add a one-off extra session for any date
    (e.g. an extra Friday class) without touching the weekly template. Either way, this
    creates a `class_sessions` row you can then open to mark attendance.
-5. **Marking attendance** (`/coach/session.html?id=...`) — shows the full active student
+6. **Marking attendance** (`/coach/session.html?id=...`) — shows the full active student
    roster with present/absent/excused radio buttons per student (defaults to absent).
    Save writes the whole roster at once. You can reopen a session later and it'll
    pre-fill from whatever was last saved, so amending attendance after the fact is safe.
@@ -127,11 +142,13 @@ Node would remove the need for the pin.
 Full DDL lives in `migrations/0001_initial.sql`. Five tables:
 
 - **`users`** — coaches and students both live here, distinguished by `role` ('coach'/
-  'student'). `status` ('active'/'inactive'/'pending' — 'pending' is reserved, unused
-  until Phase 2 self-signup approval exists). `password_hash` format:
-  `pbkdf2:sha256:<iterations>:<salt_b64>:<hash_b64>`. `must_change_password` forces the
-  change-password redirect. `failed_login_attempts` + `locked_until` implement the
-  brute-force lockout.
+  'student'). `status` ('active'/'inactive'/'pending' — 'pending' is a self-signup
+  request awaiting coach approval). `password_hash` format:
+  `pbkdf2:sha256:<iterations>:<salt_b64>:<hash_b64>` — for a `pending` row this is a
+  random placeholder nobody knows (login is already blocked for non-`active` accounts,
+  so it's never actually reachable), overwritten with a real temp password on approval.
+  `must_change_password` forces the change-password redirect. `failed_login_attempts` +
+  `locked_until` implement the brute-force lockout.
 - **`sessions`** — *login* sessions (cookie-backed), not class sessions. DB-backed
   (rather than a stateless signed cookie) specifically so logout/revocation is real and
   a coach could force-invalidate a session if needed.
@@ -186,8 +203,11 @@ Full DDL lives in `migrations/0001_initial.sql`. Five tables:
 | `/api/auth/login` | POST | public | `{email,password}` → session cookie |
 | `/api/auth/logout` | POST | public (no-op if none) | revokes session, clears cookie |
 | `/api/auth/change-password` | POST | any logged-in user | `{newPassword}`, clears `must_change_password` |
+| `/api/auth/request-account` | POST | public | `{name,email}` → creates a `pending` user (silently no-ops if the email already exists); always returns the same generic success response |
 | `/api/coach/students` | GET/POST | coach | list roster / create student + email invite |
 | `/api/coach/students/:id` | PATCH | coach | `{status}` activate/deactivate |
+| `/api/coach/requests` | GET | coach | list `pending` users |
+| `/api/coach/requests/:id` | PATCH | coach | `{action:'approve'|'reject'}` — approve activates + emails temp password; reject deletes the row |
 | `/api/coach/templates` | GET/POST | coach | list/create recurring weekly classes |
 | `/api/coach/templates/:id` | PATCH | coach | `{active}` toggle |
 | `/api/coach/sessions?date=` | GET | coach | template suggestions + existing sessions for a date |
@@ -219,10 +239,8 @@ Full DDL lives in `migrations/0001_initial.sql`. Five tables:
 - All four new tables (roster, weekly schedule, session roster, student history) wrap in
   `.scroll-x` like the original schedule table, for mobile horizontal scrolling.
 
-## What's deliberately not built yet (Phase 2/3)
+## What's deliberately not built yet (Phase 3)
 
-- **Phase 2**: public "request an account" form; coach approves/assigns role from an
-  admin screen. `users.status = 'pending'` is already reserved for this.
 - **Phase 3**: students browse the upcoming week and mark themselves "going"; coach's
   session view shows RSVPs alongside actual attendance. Needs a new `session_rsvps`
   table — deliberately not folded into `attendance`, since RSVP intent and actual
