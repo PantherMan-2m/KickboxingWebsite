@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Manage students · CJN Boxing Academy</title>
+  <title>Account requests · CJN Boxing Academy</title>
   <meta name="robots" content="noindex" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,27 +29,14 @@
 
 <main>
   <section class="container section">
-    <h2>Add a student</h2>
-    <form id="addStudentForm" class="card form" style="max-width:420px">
-      <label for="name">Name</label>
-      <input id="name" type="text" name="name" required />
-
-      <label for="email">Email</label>
-      <input id="email" type="email" name="email" required />
-
-      <button class="btn" type="submit">Add student</button>
-      <p class="form-status" id="formStatus" role="status"></p>
-    </form>
-  </section>
-
-  <section class="container section">
-    <h2>Roster</h2>
+    <h2>Account requests</h2>
+    <p class="form-status" id="formStatus" role="status"></p>
     <div class="scroll-x">
-      <table class="schedule" id="rosterTable">
+      <table class="schedule" id="requestsTable">
         <thead>
-          <tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr>
+          <tr><th>Name</th><th>Email</th><th>Requested</th><th></th></tr>
         </thead>
-        <tbody id="rosterBody">
+        <tbody id="requestsBody">
           <tr><td colspan="4">Loading…</td></tr>
         </tbody>
       </table>
@@ -94,40 +81,8 @@
     window.location.href = '/login.html';
   });
 
-  const rosterBody = document.getElementById('rosterBody');
-
-  function renderRoster(students) {
-    if (students.length === 0) {
-      rosterBody.innerHTML = '<tr><td colspan="4">No students yet.</td></tr>';
-      return;
-    }
-    rosterBody.innerHTML = students.map((s) => `
-      <tr>
-        <td>${escapeHtml(s.name)}</td>
-        <td>${escapeHtml(s.email)}</td>
-        <td>${s.status}</td>
-        <td><button class="btn btn-outline btn-sm" data-id="${s.id}" data-status="${s.status === 'active' ? 'inactive' : 'active'}">
-          ${s.status === 'active' ? 'Deactivate' : 'Activate'}
-        </button></td>
-      </tr>
-    `).join('');
-
-    rosterBody.querySelectorAll('button[data-id]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        try {
-          await fetch(`/api/coach/students/${btn.dataset.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: btn.dataset.status }),
-          });
-          await loadRoster();
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    });
-  }
+  const requestsBody = document.getElementById('requestsBody');
+  const formStatus = document.getElementById('formStatus');
 
   function escapeHtml(str) {
     const div = document.createElement('div');
@@ -135,49 +90,61 @@
     return div.innerHTML;
   }
 
-  async function loadRoster() {
-    const response = await fetch('/api/coach/students');
-    const data = await response.json();
-    if (data.ok) renderRoster(data.students);
+  function renderRequests(requests) {
+    if (requests.length === 0) {
+      requestsBody.innerHTML = '<tr><td colspan="4">No pending requests.</td></tr>';
+      return;
+    }
+    requestsBody.innerHTML = requests.map((r) => `
+      <tr>
+        <td>${escapeHtml(r.name)}</td>
+        <td>${escapeHtml(r.email)}</td>
+        <td>${new Date(r.created_at).toLocaleDateString()}</td>
+        <td>
+          <button class="btn btn-sm" data-id="${r.id}" data-action="approve">Approve</button>
+          <button class="btn btn-outline btn-sm" data-id="${r.id}" data-action="reject">Reject</button>
+        </td>
+      </tr>
+    `).join('');
+
+    requestsBody.querySelectorAll('button[data-action]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          const response = await fetch(`/api/coach/requests/${btn.dataset.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: btn.dataset.action }),
+          });
+          const data = await response.json();
+
+          if (!response.ok || !data.ok) {
+            formStatus.textContent = data.error || 'Could not update this request.';
+            return;
+          }
+
+          if (btn.dataset.action === 'approve') {
+            formStatus.textContent = data.emailSent
+              ? 'Approved -- invite email sent.'
+              : `Approved -- invite email failed to send. Temporary password: ${data.tempPassword} (share this with them directly).`;
+          } else {
+            formStatus.textContent = 'Request rejected.';
+          }
+          await loadRequests();
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
   }
 
-  document.getElementById('addStudentForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const status = document.getElementById('formStatus');
-    const submitButton = form.querySelector('button[type="submit"]');
+  async function loadRequests() {
+    const response = await fetch('/api/coach/requests');
+    const data = await response.json();
+    if (data.ok) renderRequests(data.requests);
+  }
 
-    status.textContent = 'Adding student…';
-    submitButton.disabled = true;
-
-    try {
-      const response = await fetch('/api/coach/students', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name.value, email: form.email.value }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.ok) {
-        status.textContent = data.error || 'Could not add student.';
-        return;
-      }
-
-      if (data.emailSent) {
-        status.textContent = `${data.student.name} added -- invite email sent.`;
-      } else {
-        status.textContent = `${data.student.name} added -- invite email failed to send. Temporary password: ${data.tempPassword} (share this with them directly).`;
-      }
-      form.reset();
-      await loadRoster();
-    } catch (error) {
-      status.textContent = 'Sorry, something went wrong. Please try again.';
-    } finally {
-      submitButton.disabled = false;
-    }
-  });
-
-  loadRoster();
+  loadRequests();
 </script>
 </body>
 </html>
