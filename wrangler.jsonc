@@ -1,0 +1,12 @@
+{
+  "name": "cjn-academy-website",
+  "pages_build_output_dir": ".",
+  "compatibility_date": "2026-08-04",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cjn-academy",
+      "database_id": "004b5cdb-6779-42f3-bb07-def9eeca1852"
+    }
+  ]
+}
