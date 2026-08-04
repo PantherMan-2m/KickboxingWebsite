@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mark attendance · CJN Boxing Academy</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+<header class="site-header">
+  <div class="container nav">
+    <a class="logo" href="/">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
+    <nav class="nav-links">
+      <a href="/coach/dashboard.html">Dashboard</a>
+      <a href="/coach/students.html">Students</a>
+      <a href="/coach/templates.html">Schedule</a>
+      <a href="/coach/attendance.html">Attendance</a>
+      <a href="#" id="logoutLink">Log out</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="container section">
+    <h2 id="sessionTitle">Loading…</h2>
+    <p class="muted" id="sessionMeta"></p>
+  </section>
+
+  <section class="container section">
+    <div id="rosterContainer">Loading roster…</div>
+    <p style="margin-top:16px">
+      <button class="btn" id="saveButton">Save attendance</button>
+      <span class="form-status" id="formStatus" role="status"></span>
+    </p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© <span id="year"></span> CJN Boxing Academy · Somerset West, South Africa</p>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login.html';
+  });
+
+  const sessionId = new URLSearchParams(window.location.search).get('id');
+  const rosterContainer = document.getElementById('rosterContainer');
+  const statuses = ['present', 'absent', 'excused'];
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function load() {
+    if (!sessionId) {
+      rosterContainer.innerHTML = '<p>No session specified.</p>';
+      return;
+    }
+    const response = await fetch(`/api/coach/sessions/${sessionId}`);
+    const data = await response.json();
+    if (!data.ok) {
+      rosterContainer.innerHTML = `<p>${data.error || 'Could not load session.'}</p>`;
+      return;
+    }
+
+    document.getElementById('sessionTitle').textContent = data.session.name;
+    document.getElementById('sessionMeta').textContent =
+      `${data.session.date}${data.session.startTime ? ' · ' + data.session.startTime : ''}`;
+
+    if (data.roster.length === 0) {
+      rosterContainer.innerHTML = '<p class="muted">No active students on the roster yet.</p>';
+      return;
+    }
+
+    rosterContainer.innerHTML = `
+      <table class="schedule">
+        <thead><tr><th>Name</th><th>Present</th><th>Absent</th><th>Excused</th></tr></thead>
+        <tbody>
+          ${data.roster.map((s) => `
+            <tr data-user-id="${s.id}">
+              <td>${escapeHtml(s.name)}</td>
+              ${statuses.map((st) => `
+                <td style="text-align:center">
+                  <input type="radio" name="status-${s.id}" value="${st}" ${s.status === st ? 'checked' : ''} />
+                </td>
+              `).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  document.getElementById('saveButton').addEventListener('click', async () => {
+    const status = document.getElementById('formStatus');
+    const saveButton = document.getElementById('saveButton');
+    const rows = rosterContainer.querySelectorAll('tr[data-user-id]');
+
+    const records = Array.from(rows).map((row) => {
+      const userId = row.dataset.userId;
+      const checked = row.querySelector('input[type="radio"]:checked');
+      return { userId, status: checked ? checked.value : 'absent' };
+    });
+
+    status.textContent = 'Saving…';
+    saveButton.disabled = true;
+
+    try {
+      const response = await fetch('/api/coach/mark-attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, records }),
+      });
+      const data = await response.json();
+      status.textContent = data.ok ? 'Saved.' : (data.error || 'Could not save.');
+    } catch (error) {
+      status.textContent = 'Sorry, something went wrong. Please try again.';
+    } finally {
+      saveButton.disabled = false;
+    }
+  });
+
+  load();
+</script>
+</body>
+</html>
