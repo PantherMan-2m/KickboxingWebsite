@@ -311,6 +311,14 @@ html, body { overflow-x: hidden; }
   /* Coach/student utility pages (login, dashboards, roster, etc.) don't load the
      hamburger-menu JS that toggles .nav-links.open above -- so on these pages the nav
      must stay visible and just wrap, instead of collapsing into an unreachable menu. */
+  .site-header.app .nav{
+    height: auto;         /* .nav has a fixed 64px height normally -- must grow to fit
+                              wrapped links, or wrapped rows overflow above/below it */
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 10px 0;
+    row-gap: 6px;
+  }
   .site-header.app .nav-links{
     position: static;
     flex-direction: row;
@@ -322,7 +330,8 @@ html, body { overflow-x: hidden; }
     background: none;
     backdrop-filter: none;
     border-bottom: none;
-    padding: 10px 0;
+    padding: 0;
+    row-gap: 6px;
   }
 
   .nav-links a{
