@@ -36,6 +36,32 @@ This is a fast, free-to-host static site for your gym.
 - This only works when deployed on Cloudflare Pages with the `functions/` folder included and a `RESEND_API_KEY` environment variable set (see Hosting Options above).
 - On hosts that can't run that function (GitHub Pages, plain Netlify/Vercel), swap in a hosted form service instead (e.g. Formspree, Netlify Forms) or rewrite the function for that platform.
 
+## Coach/Student Login & Attendance
+The site also has a coach/student login system (`login.html`, `/coach/*`, `/student/*`)
+backed by **Cloudflare D1** (SQLite), for coaches to manage a student roster and mark
+class attendance.
+
+- Requires a D1 database bound to the Pages project as `DB` (Settings → Bindings → D1
+  database bindings), for both Production and Preview. `wrangler.jsonc` at the repo root
+  declares the same binding for local dev via `wrangler pages dev`.
+- Schema lives in `migrations/0001_initial.sql` — apply it with:
+  ```
+  npx wrangler@3 d1 execute cjn-academy --remote --file=./migrations/0001_initial.sql
+  ```
+  (older `@3` pinned because this project's Node version predates what current Wrangler requires — see below.)
+- Student invite emails reuse the existing `RESEND_API_KEY` (see Contact Form section) via
+  `functions/api/_utils/email.js`.
+- There's no self-signup yet — the first coach account is created locally with
+  `bootstrap-user.js` in the outer project folder (outside this repo, same as
+  `Server.js`) so the password never has to pass through git or an AI assistant:
+  ```
+  node bootstrap-user.js "coach@example.com" "Coach Name" coach
+  ```
+  It prints a SQL `INSERT` to run via `wrangler d1 execute`.
+- **Wrangler version note**: the latest Wrangler requires Node 22+; this project's local
+  Node is older, so `wrangler@3` is used explicitly for any `wrangler d1`/`wrangler pages`
+  commands until Node is upgraded.
+
 ## Analytics & SEO
 - Add a Google Analytics tag (optional).
 - Update `<meta name="description">` in `index.html`.
