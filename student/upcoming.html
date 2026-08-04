@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>My attendance · CJN Boxing Academy</title>
+  <title>Upcoming classes · CJN Boxing Academy</title>
   <meta name="robots" content="noindex" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,12 +26,15 @@
 
 <main>
   <section class="container section">
-    <h2>My attendance</h2>
+    <h2>Upcoming classes</h2>
+    <p class="muted">The next 7 days. RSVP so your coach knows who's coming.</p>
     <div class="scroll-x">
-      <table class="schedule" id="attendanceTable">
-        <thead><tr><th>Date</th><th>Class</th><th>Status</th></tr></thead>
-        <tbody id="attendanceBody">
-          <tr><td colspan="3">Loading…</td></tr>
+      <table class="schedule" id="upcomingTable">
+        <thead>
+          <tr><th>Date</th><th>Class</th><th>Time</th><th></th></tr>
+        </thead>
+        <tbody id="upcomingBody">
+          <tr><td colspan="4">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -75,24 +78,58 @@
     window.location.href = '/login.html';
   });
 
+  const upcomingBody = document.getElementById('upcomingBody');
+
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
   }
 
-  (async () => {
-    const response = await fetch('/api/student/attendance');
-    const data = await response.json();
-    const body = document.getElementById('attendanceBody');
-    if (!data.ok || data.attendance.length === 0) {
-      body.innerHTML = '<tr><td colspan="3">No attendance recorded yet.</td></tr>';
+  function renderUpcoming(list) {
+    if (list.length === 0) {
+      upcomingBody.innerHTML = '<tr><td colspan="4">No classes scheduled in the next 7 days.</td></tr>';
       return;
     }
-    body.innerHTML = data.attendance.map((a) => `
-      <tr><td>${a.date}</td><td>${escapeHtml(a.name)}</td><td>${a.status}</td></tr>
+    upcomingBody.innerHTML = list.map((c) => `
+      <tr>
+        <td>${c.date}</td>
+        <td>${escapeHtml(c.name)}</td>
+        <td>${c.startTime}${c.endTime ? ' - ' + c.endTime : ''}</td>
+        <td><button class="btn btn-sm" data-template-id="${c.templateId}" data-date="${c.date}" data-going="${c.going ? '0' : '1'}">
+          ${c.going ? "Going ✓ (tap to cancel)" : "I'm going"}
+        </button></td>
+      </tr>
     `).join('');
-  })();
+
+    upcomingBody.querySelectorAll('button[data-template-id]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          await fetch('/api/student/rsvp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              templateId: btn.dataset.templateId,
+              date: btn.dataset.date,
+              going: btn.dataset.going === '1',
+            }),
+          });
+          await loadUpcoming();
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  async function loadUpcoming() {
+    const response = await fetch('/api/student/upcoming');
+    const data = await response.json();
+    if (data.ok) renderUpcoming(data.upcoming);
+  }
+
+  loadUpcoming();
 </script>
 </body>
 </html>

@@ -113,11 +113,12 @@
     rosterContainer.innerHTML = `
       <div class="scroll-x">
       <table class="schedule">
-        <thead><tr><th>Name</th><th>Present</th><th>Absent</th><th>Excused</th></tr></thead>
+        <thead><tr><th>Name</th><th>RSVP</th><th>Present</th><th>Absent</th><th>Excused</th></tr></thead>
         <tbody>
           ${data.roster.map((s) => `
             <tr data-user-id="${s.id}">
               <td>${escapeHtml(s.name)}</td>
+              <td>${s.going ? '✓ Going' : ''}</td>
               ${statuses.map((st) => `
                 <td style="text-align:center">
                   <input type="radio" name="status-${s.id}" value="${st}" ${s.status === st ? 'checked' : ''} />
