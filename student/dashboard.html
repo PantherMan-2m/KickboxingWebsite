@@ -24,7 +24,12 @@
 <main>
   <section class="container section">
     <h2>My attendance</h2>
-    <p class="muted">Your attendance history will appear here.</p>
+    <table class="schedule" id="attendanceTable">
+      <thead><tr><th>Date</th><th>Class</th><th>Status</th></tr></thead>
+      <tbody id="attendanceBody">
+        <tr><td colspan="3">Loading…</td></tr>
+      </tbody>
+    </table>
   </section>
 </main>
 
@@ -41,6 +46,25 @@
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.href = '/login.html';
   });
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  (async () => {
+    const response = await fetch('/api/student/attendance');
+    const data = await response.json();
+    const body = document.getElementById('attendanceBody');
+    if (!data.ok || data.attendance.length === 0) {
+      body.innerHTML = '<tr><td colspan="3">No attendance recorded yet.</td></tr>';
+      return;
+    }
+    body.innerHTML = data.attendance.map((a) => `
+      <tr><td>${a.date}</td><td>${escapeHtml(a.name)}</td><td>${a.status}</td></tr>
+    `).join('');
+  })();
 </script>
 </body>
 </html>
