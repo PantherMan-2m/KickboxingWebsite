@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Attendance · CJN Boxing Academy</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+<header class="site-header">
+  <div class="container nav">
+    <a class="logo" href="/">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
+    <nav class="nav-links">
+      <a href="/coach/dashboard.html">Dashboard</a>
+      <a href="/coach/students.html">Students</a>
+      <a href="/coach/templates.html">Schedule</a>
+      <a href="/coach/attendance.html">Attendance</a>
+      <a href="#" id="logoutLink">Log out</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="container section">
+    <h2>Attendance</h2>
+    <div class="card" style="max-width:260px">
+      <label for="dateInput">Date</label>
+      <input id="dateInput" type="date" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#121317;color:var(--text)" />
+    </div>
+  </section>
+
+  <section class="container section">
+    <h3>Scheduled classes for this date</h3>
+    <div id="suggestedSessions" class="card">Loading…</div>
+  </section>
+
+  <section class="container section">
+    <h3>Add an extra one-off session</h3>
+    <form id="addOneOffForm" class="card form" style="max-width:420px">
+      <label for="name">Class name</label>
+      <input id="name" type="text" name="name" required placeholder="Extra Friday sparring" />
+
+      <label for="startTime">Start time (optional)</label>
+      <input id="startTime" type="time" name="startTime" />
+
+      <label for="endTime">End time (optional)</label>
+      <input id="endTime" type="time" name="endTime" />
+
+      <button class="btn" type="submit">Create session</button>
+      <p class="form-status" id="formStatus" role="status"></p>
+    </form>
+  </section>
+
+  <section class="container section">
+    <h3>All sessions on this date</h3>
+    <div id="allSessions" class="card">Loading…</div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© <span id="year"></span> CJN Boxing Academy · Somerset West, South Africa</p>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login.html';
+  });
+
+  function todayLocalIso() {
+    const d = new Date();
+    const offset = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - offset * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  const dateInput = document.getElementById('dateInput');
+  dateInput.value = todayLocalIso();
+
+  async function createSessionFromTemplate(templateId, date) {
+    const response = await fetch('/api/coach/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ templateId, date }),
+    });
+    const data = await response.json();
+    if (data.ok) window.location.href = `/coach/session.html?id=${data.session.id}`;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function loadForDate() {
+    const date = dateInput.value;
+    const response = await fetch(`/api/coach/sessions?date=${date}`);
+    const data = await response.json();
+    if (!data.ok) return;
+
+    const suggestedEl = document.getElementById('suggestedSessions');
+    if (data.templatesForDay.length === 0) {
+      suggestedEl.innerHTML = '<p class="muted">No recurring classes scheduled for this day of the week.</p>';
+    } else {
+      suggestedEl.innerHTML = data.templatesForDay.map((t) => `
+        <p>
+          <strong>${escapeHtml(t.name)}</strong> · ${t.startTime}${t.endTime ? ' - ' + t.endTime : ''}
+          ${t.sessionExists
+            ? `<a class="btn btn-sm" href="/coach/session.html?id=${t.sessionId}">Open</a>`
+            : `<button class="btn btn-sm" data-template-id="${t.templateId}">Create session</button>`}
+        </p>
+      `).join('');
+      suggestedEl.querySelectorAll('button[data-template-id]').forEach((btn) => {
+        btn.addEventListener('click', () => createSessionFromTemplate(btn.dataset.templateId, date));
+      });
+    }
+
+    const allEl = document.getElementById('allSessions');
+    if (data.sessions.length === 0) {
+      allEl.innerHTML = '<p class="muted">No sessions created for this date yet.</p>';
+    } else {
+      allEl.innerHTML = data.sessions.map((s) => `
+        <p>
+          <a href="/coach/session.html?id=${s.id}">${escapeHtml(s.name)}</a>
+          ${s.startTime ? ' · ' + s.startTime : ''}${s.templateId ? '' : ' (one-off)'}
+        </p>
+      `).join('');
+    }
+  }
+
+  dateInput.addEventListener('change', loadForDate);
+
+  document.getElementById('addOneOffForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const status = document.getElementById('formStatus');
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    status.textContent = 'Creating…';
+    submitButton.disabled = true;
+
+    try {
+      const response = await fetch('/api/coach/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: dateInput.value,
+          name: form.name.value,
+          startTime: form.startTime.value || undefined,
+          endTime: form.endTime.value || undefined,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        status.textContent = data.error || 'Could not create session.';
+        return;
+      }
+
+      window.location.href = `/coach/session.html?id=${data.session.id}`;
+    } catch (error) {
+      status.textContent = 'Sorry, something went wrong. Please try again.';
+      submitButton.disabled = false;
+    }
+  });
+
+  loadForDate();
+</script>
+</body>
+</html>

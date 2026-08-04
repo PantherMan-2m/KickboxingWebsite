@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Weekly schedule · CJN Boxing Academy</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+<header class="site-header">
+  <div class="container nav">
+    <a class="logo" href="/">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
+    <nav class="nav-links">
+      <a href="/coach/dashboard.html">Dashboard</a>
+      <a href="/coach/students.html">Students</a>
+      <a href="/coach/templates.html">Schedule</a>
+      <a href="/coach/attendance.html">Attendance</a>
+      <a href="#" id="logoutLink">Log out</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="container section">
+    <h2>Add a recurring weekly class</h2>
+    <form id="addTemplateForm" class="card form" style="max-width:420px">
+      <label for="dayOfWeek">Day of week</label>
+      <select id="dayOfWeek" name="dayOfWeek" required>
+        <option value="0">Sunday</option>
+        <option value="1">Monday</option>
+        <option value="2">Tuesday</option>
+        <option value="3">Wednesday</option>
+        <option value="4">Thursday</option>
+        <option value="5">Friday</option>
+        <option value="6">Saturday</option>
+      </select>
+
+      <label for="startTime">Start time</label>
+      <input id="startTime" type="time" name="startTime" required />
+
+      <label for="endTime">End time (optional)</label>
+      <input id="endTime" type="time" name="endTime" />
+
+      <label for="name">Class name</label>
+      <input id="name" type="text" name="name" required placeholder="All Levels" />
+
+      <button class="btn" type="submit">Add to schedule</button>
+      <p class="form-status" id="formStatus" role="status"></p>
+    </form>
+  </section>
+
+  <section class="container section">
+    <h2>Current weekly schedule</h2>
+    <table class="schedule" id="templatesTable">
+      <thead>
+        <tr><th>Day</th><th>Time</th><th>Class</th></tr>
+      </thead>
+      <tbody id="templatesBody">
+        <tr><td colspan="3">Loading…</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© <span id="year"></span> CJN Boxing Academy · Somerset West, South Africa</p>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login.html';
+  });
+
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const templatesBody = document.getElementById('templatesBody');
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function loadTemplates() {
+    const response = await fetch('/api/coach/templates');
+    const data = await response.json();
+    if (!data.ok) return;
+    if (data.templates.length === 0) {
+      templatesBody.innerHTML = '<tr><td colspan="3">No recurring classes set up yet.</td></tr>';
+      return;
+    }
+    templatesBody.innerHTML = data.templates.map((t) => `
+      <tr>
+        <td>${DAY_NAMES[t.day_of_week]}</td>
+        <td>${t.start_time}${t.end_time ? ' - ' + t.end_time : ''}</td>
+        <td>${escapeHtml(t.name)}</td>
+      </tr>
+    `).join('');
+  }
+
+  document.getElementById('addTemplateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const status = document.getElementById('formStatus');
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    status.textContent = 'Saving…';
+    submitButton.disabled = true;
+
+    try {
+      const response = await fetch('/api/coach/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dayOfWeek: Number(form.dayOfWeek.value),
+          startTime: form.startTime.value,
+          endTime: form.endTime.value || undefined,
+          name: form.name.value,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        status.textContent = data.error || 'Could not save.';
+        return;
+      }
+
+      status.textContent = 'Added.';
+      form.reset();
+      await loadTemplates();
+    } catch (error) {
+      status.textContent = 'Sorry, something went wrong. Please try again.';
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  loadTemplates();
+</script>
+</body>
+</html>
