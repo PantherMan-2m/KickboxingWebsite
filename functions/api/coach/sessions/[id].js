@@ -26,9 +26,22 @@ export async function onRequestGet(context) {
     .bind(id)
     .all();
 
+  // RSVPs are keyed to the weekly template + date, not this session row (students RSVP
+  // before a coach ever creates the session) -- one-off sessions have no template, so
+  // there's nothing to match and every row's `going` stays false.
+  let goingIds = new Set();
+  if (session.templateId) {
+    const { results: rsvps } = await context.env.DB.prepare(
+      `SELECT user_id FROM session_rsvps WHERE template_id = ? AND session_date = ?`
+    )
+      .bind(session.templateId, session.date)
+      .all();
+    goingIds = new Set(rsvps.map((r) => r.user_id));
+  }
+
   return jsonResponse({
     ok: true,
     session,
-    roster: roster.map((r) => ({ ...r, status: r.status || 'absent' })),
+    roster: roster.map((r) => ({ ...r, status: r.status || 'absent', going: goingIds.has(r.id) })),
   });
 }

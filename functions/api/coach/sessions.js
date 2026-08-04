@@ -1,14 +1,5 @@
 import { jsonResponse } from '../_utils/auth.js';
-
-function dayOfWeekFor(dateStr) {
-  // Parse as UTC midnight so the computed day-of-week matches the calendar date
-  // regardless of the server's local timezone.
-  return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
-}
-
-function isValidDate(dateStr) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !isNaN(new Date(`${dateStr}T00:00:00Z`).getTime());
-}
+import { isValidDate, dayOfWeekFor } from '../_utils/dates.js';
 
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
