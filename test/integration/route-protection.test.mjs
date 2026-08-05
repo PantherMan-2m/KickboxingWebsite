@@ -135,3 +135,39 @@ test('docs: wrong role (student) -> redirect to /student/dashboard.html', async 
   assert.equal(res.status, 302);
   assert.match(res.headers.get('location'), /\/student\/dashboard\.html$/);
 });
+
+// --- functions/api/auth/session.js (T1.2: public session-state endpoint) ---
+// Public by construction -- api/auth/ has no _middleware.js. Anonymous callers
+// must get a plain 200 {ok:true, user:null}, never a 401/redirect (the
+// homepage calls this to decide "Login" vs "My dashboard" and must not look
+// broken to an anonymous visitor with devtools open).
+
+test('session: anonymous -> 200 with user:null, not a 401 or redirect', async () => {
+  const res = await get('/api/auth/session', null);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.user, null);
+});
+
+test('session: coach -> 200 with name+role only, exact key set', async () => {
+  const { cookie } = await login('coach@seed.test', 'CoachPass123!');
+  const res = await get('/api/auth/session', cookie);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.deepEqual(Object.keys(body.user).sort(), ['name', 'role']);
+  assert.equal(body.user.role, 'coach');
+  assert.equal(body.user.name, 'Seed Coach');
+});
+
+test('session: student -> 200 with name+role only, exact key set', async () => {
+  const { cookie } = await login('active1@seed.test', 'StudentPass123!');
+  const res = await get('/api/auth/session', cookie);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.deepEqual(Object.keys(body.user).sort(), ['name', 'role']);
+  assert.equal(body.user.role, 'student');
+  assert.equal(body.user.name, 'Alice Active');
+});

@@ -18,6 +18,7 @@
     <a class="logo" href="/">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
     <button class="menu-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="primary-nav">☰</button>
     <nav id="primary-nav" class="nav-links">
+      <a href="/">Home</a>
       <a href="/coach/dashboard.html">Dashboard</a>
       <a href="/coach/students.html">Students</a>
       <a href="/coach/requests.html">Requests</a>
@@ -79,8 +80,21 @@
     return local.toISOString().slice(0, 10);
   }
 
+  // Reads ?date= from the URL (coach/session.html's back link sets this so
+  // the coach lands back on the date they came from, not today). Rejects a
+  // malformed value -- including a well-formed but impossible calendar date
+  // like 2026-02-30, which `Date` would otherwise silently normalize -- and
+  // falls back to null so the caller uses today instead.
+  function dateFromQuery() {
+    const param = new URLSearchParams(window.location.search).get('date');
+    if (!param || !/^\d{4}-\d{2}-\d{2}$/.test(param)) return null;
+    const d = new Date(`${param}T00:00:00Z`);
+    if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== param) return null;
+    return param;
+  }
+
   const dateInput = document.getElementById('dateInput');
-  dateInput.value = todayLocalIso();
+  dateInput.value = dateFromQuery() || todayLocalIso();
 
   async function createSessionFromTemplate(templateId, date) {
     const { data } = await fetchJson('/api/coach/sessions', {
