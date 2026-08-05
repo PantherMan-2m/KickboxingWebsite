@@ -15,9 +15,11 @@ status:
 4. No IP-based rate limiting on login, only the per-account 5-attempt/15-minute lockout.
    Fine at gym scale, revisit if abuse shows up.
 
-## Phase 0 (foundation) — done, see `reports/phase-0-completion.md` for full evidence
-Built on branch `phase-0-foundation`, per-task exit-condition evidence recorded in
-`reports/phase-0-completion.md` (outer folder). Summary:
+## Phase 0 (foundation) — done and merged to `main`, see `reports/phase-0-completion.md`
+Built on branch `phase-0-foundation`, then `chore/git-root` (the repo restructure below),
+merged to `main` as a fast-forward (`9582248`) on 2026-08-05. T0.7's post-deploy
+live-Functions smoke test passed against the live site. Per-task exit-condition evidence
+in `reports/phase-0-completion.md`. Summary:
 - `stable-phase3` tag marks the pre-Phase-0 rollback point (local + pushed to origin).
 - Node upgraded to v24.19.0; the old Wrangler 3 pin dropped for unpinned `wrangler`
   (4.118.0). Stale global npm (9.8.1, shadowing Node 24's bundled 11.17.0 via a leftover
@@ -31,7 +33,7 @@ Built on branch `phase-0-foundation`, per-task exit-condition evidence recorded 
   data). Non-obvious gotcha documented in `coach-student-system.md`: `wrangler pages dev`
   needs `--d1=DB=<database_id>` (not the database *name*) to bind to the same local D1
   the migration/seed commands use.
-- Automated test suite (`npm test`, Node's built-in test runner, 36 tests): unit tests for
+- Automated test suite (`npm test`, Node's built-in test runner, 37 tests): unit tests for
   date helpers + password hashing, integration tests for login/lockout/all 4
   route-protection middlewares (now 5, including `/docs/*`)/RSVP.
 - Two real bugs fixed with regression tests written failing-first: `todayIso()` used UTC
@@ -42,18 +44,26 @@ Built on branch `phase-0-foundation`, per-task exit-condition evidence recorded 
   Feb 30 (`Date` silently normalizes overflow instead of erroring).
 - `public/docs/coach-student-system.md` no longer served publicly — gated behind a coach
   session via `functions/docs/_middleware.js`.
-- Two rounds of local max-effort code review of the branch (2026-08-05, same day) found
-  and fixed real correctness bugs the process that built the code didn't catch itself:
-  round 1 fixed RSVP cancellation being blocked by create-time validation, a `null` JSON
-  body crashing `rsvp.js` with a 500, and a login test that couldn't actually prove what
-  it claimed. Round 2 caught that round 1's *own fix* for a shell-quoting bug was itself
-  wrong (a "closes off the whole bug class" claim that shipped false into three places) —
-  the real fix adds `wrangler` as a devDependency (see `devDependencies` in
-  `package.json`, resolved via `node_modules/wrangler`) and invokes it directly via `node`
-  instead of through `npx`/a shell, pinning the version as a side effect. Round 2 also
-  pushed the branch to `origin` (it had no upstream) and fixed a factual error in the
-  completion report. Full findings and triage in `reports/phase-0-completion.md`. Some
-  items were logged rather than fixed, below.
+- Four rounds of review/follow-up on the branch (2026-08-05, same day) found and fixed real
+  problems the process that built the code didn't catch itself: round 1 fixed RSVP
+  cancellation being blocked by create-time validation, a `null` JSON body crashing
+  `rsvp.js` with a 500, and a login test that couldn't actually prove what it claimed.
+  Round 2 caught that round 1's *own fix* for a shell-quoting bug was itself wrong (a
+  "closes off the whole bug class" claim that shipped false into three places) — the real
+  fix adds `wrangler` as a devDependency (see `devDependencies` in `package.json`, resolved
+  via `node_modules/wrangler`) and invokes it directly via `node` instead of through
+  `npx`/a shell, pinning the version as a side effect. Round 2 also pushed the branch to
+  `origin` (it had no upstream) and fixed a factual error in the completion report. Round 3
+  triaged the remaining 11 second-pass `/code-review ultra` findings
+  (`reports/phase-0-review-triage.md`) and fixed the ones ranked real-and-in-scope: `7`
+  hardcoded database names replaced with a shared `getD1Config()` lookup, a guard against
+  more than one `d1_databases` entry, a de-duplicated test helper, and a test pinning
+  `rsvp.js`'s deliberate 400-before-404 validation order (suite now 37 tests). Round 4
+  moved the git repo root from `public/` to this outer folder (`chore/git-root`) so
+  `scripts/`, `test/`, `reports/`, and `package.json` became version-controlled instead of
+  living untracked on one machine, then merged everything to `main` and passed T0.7's
+  live-Functions smoke test on the deployed site. Full findings and triage in
+  `reports/phase-0-completion.md`. Some items were logged rather than fixed, below.
 
 ### Logged, not fixed (from the 2026-08-05 code review)
 - **Systemic**: every Pages Function handler that does `body.foo` or destructures a
@@ -84,17 +94,23 @@ Built on branch `phase-0-foundation`, per-task exit-condition evidence recorded 
 sending domain is verified, and the form sends to `info@cjnacademy.com` (which
 Cloudflare Email Routing forwards to Protonmail). Confirmed end-to-end by the user.
 
-## Repo structure — resolved (differently than originally planned)
-Only `functions/api/contact.js` was moved into `public/functions/` rather than moving
-the whole git root — Cloudflare Pages looks for `functions/` at the root of whatever it
-deploys, and that's already `public/`.
+## Repo structure — RESOLVED 2026-08-05, superseding the note that used to be here
+This section previously said only `functions/api/contact.js` was moved into
+`public/functions/` and that moving the whole git root was rejected, on the reasoning that
+Cloudflare Pages looks for `functions/` at the root of whatever it deploys. That reasoning
+was correct but incomplete — Pages' **Root directory** build setting is exactly the knob
+that resolves it, and Phase 0's checkpoint review flagged the untracked-tooling cost of the
+old setup as no longer acceptable once a test suite became load-bearing for nine remaining
+phases (see `reports/phase-0-checkpoint-review.md`, "Pending decision" item 5).
 
-- `Server.js`, `package.json`, `package-lock.json`, `node_modules/`, and
-  `bootstrap-user.js` stay outside the repo, untracked — local-only dev tooling, not
-  needed for deployment.
-- `package.json` has a locally-fixed duplicate `scripts` key + `Server.js` casing fix
-  that only exists on this machine (file isn't tracked anywhere). Redo it if the outer
-  folder is ever lost/recreated.
+Resolved by moving the git root from `public/` to this outer folder (`chore/git-root`,
+merged to `main` in `9582248`), with Cloudflare Pages' Root directory set to `public`.
+`Server.js`, `package.json`, `package-lock.json`, `bootstrap-user.js`, `scripts/`, `test/`,
+`reports/`, `PLAN.md`, `HANDOVER.md`, and `TODO.md` are now all tracked. Still untracked,
+by `.gitignore` at the new root: `node_modules/`, `.wrangler/`, and `backups/` (production
+D1 exports with real password hashes — **never let this be staged**). See
+`HANDOVER.md`'s "Repo layout" section for the full current state, including the two-step
+rollback this creates (`stable-phase3` has the *old* layout).
 
 ## Low priority / nice-to-have
 - Instagram social link is still a placeholder (`href="#"`) — no URL provided yet.

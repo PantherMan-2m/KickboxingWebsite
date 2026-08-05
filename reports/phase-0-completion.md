@@ -1,11 +1,14 @@
 # Phase 0 Completion Report — Foundation
 
-**Status**: T0.1–T0.8 done and verified, survived three independent review checkpoints —
-two holding the merge for fixes (4, then 5 — see "Round 3" below), one (the second-pass
-`/code-review ultra` triage, `reports/phase-0-review-triage.md`) sorting the resulting 11
-findings into fix-now/log/reject/decline. Branch pushed to `origin`. Remaining before the
-phase is done: the merge itself (`[HUMAN GATE]`), and T0.7's post-deploy live-Functions
-smoke test, which can only run after that merge deploys.
+**Status**: **Phase 0 complete.** T0.1–T0.8 done and verified, survived three independent
+review checkpoints — two holding the merge for fixes (4, then 5 — see "Round 3" below), one
+(the second-pass `/code-review ultra` triage, `reports/phase-0-review-triage.md`) sorting
+the resulting 11 findings into fix-now/log/reject/decline — plus a fourth round (a repo
+restructure moving the git root from `public/` to the outer folder, `chore/git-root`,
+`f0c3ec8`/`9582248`) that the checkpoint review's item 5 had left as a pending decision.
+Merged to `main` (fast-forward, `9582248`) on 2026-08-05 and pushed. T0.7's post-deploy
+live-Functions smoke test has been run against the live site and passes — see "Round 4"
+below.
 
 **Branch**: `phase-0-foundation`, pushed to `origin` with upstream tracking. **Correction**:
 an earlier version of this report claimed T0.1–T0.4 "landed on `main` directly" — that was
@@ -552,7 +555,7 @@ it was asserted during T0.6, never verified against a real deploy. T0.7 now requ
 post-deploy live-Functions smoke test after the merge lands and Cloudflare Pages deploys:
 confirm a real login succeeds, one authenticated API call returns JSON, and an
 unauthenticated `/coach/dashboard.html` still redirects — before the phase is called done.
-Not yet performed; sequenced after the merge, which hasn't happened yet.
+**Performed — see "Round 4" below.**
 
 ---
 
@@ -681,10 +684,68 @@ report doesn't read as if they were forgotten:
 
 ---
 
+## Round 4 — merge to `main`, and T0.7's post-deploy live-Functions smoke test
+
+**Pre-merge check, re-derived, not assumed**: `chore/git-root` (`9582248`) confirmed
+containing every commit that was on `phase-0-foundation` (`f77ac8b`) plus the git-root
+restructure — verified via `git log --oneline` showing `f77ac8b` and all prior Phase 0
+commits as ancestors of `9582248` before the merge command ran.
+
+**Merge**: `[HUMAN GATE]`, confirmed, then run:
+```
+git checkout main && git merge chore/git-root && git push origin main
+```
+Output: `Updating 44edd13..9582248`, **Fast-forward**, `86 files changed, 5776
+insertions(+), 96 deletions(-)`, then `To https://github.com/PantherMan-2m/KickboxingWebsite.git
+44edd13..9582248  main -> main`. Fast-forward (not a merge commit) because `main` had not
+moved since `stable-phase3` — confirmed by `git rev-parse main` and `git rev-parse
+origin/main` both returning `9582248` immediately after, and `git rev-parse
+stable-phase3^{commit}` still returning `44edd134784751a00d81410822486513bc44f35f`,
+unchanged.
+
+**Note on branch content**: `chore/git-root` carried one additional commit
+(`9582248`, `docs: record the git-root move in HANDOVER.md; adopt the Opus/Sonnet
+execution split in PLAN.md`) beyond the `f0c3ec8` restructure — pending working-tree edits
+to `HANDOVER.md`/`PLAN.md` from a prior planning pass that had never been committed. They
+were inspected (coherent, accurate to the branch's actual state, not stray or
+contradictory), committed, and pushed before the merge rather than merging over
+uncommitted state or discarding them.
+
+**T0.7 post-deploy live-Functions smoke test** — against `cjnacademy.com`, not a preview:
+
+1. `GET /coach/dashboard.html`, no cookie:
+   ```
+   STATUS: 302
+   LOCATION: https://cjnacademy.com/login.html
+   ```
+2. `GET /docs/coach-student-system.md`, no cookie:
+   ```
+   STATUS: 302
+   LOCATION: https://cjnacademy.com/login.html
+   ```
+   Both confirmed via full response headers, not just status: `cf-cache-status: DYNAMIC`
+   on both — proving these are live Function/middleware responses, not a stale cached
+   static file left over from before T0.8 gated this path. (Before T0.8, and before this
+   merge, `/docs/coach-student-system.md` was served as a plain static file with no
+   redirect — this specific check is what T0.7 exists to catch: confirmation that
+   `functions/package.json` in the deployed tree didn't make Wrangler's bundler drop the
+   `docs/_middleware.js` that produces this redirect.)
+3. Real login succeeds — **confirmed by Giovanni directly against the live site**, not by
+   an automated check (credentials are out of scope for this session to handle).
+4. An authenticated API call returns real data — **confirmed by Giovanni**: logged in as
+   coach, clicked through to `/coach/students.html` ("Manage Students"), roster loaded.
+   This is the page that calls `GET /api/coach/students`; the coach dashboard itself
+   (`/coach/dashboard.html`) only shows navigation badges and makes no API call of its own,
+   which is why this check runs against `students.html` instead.
+
+All four checks pass. Phase 0 is done per T0.7's exit condition.
+
+---
+
 ## Summary
 
 Phase 0 delivers exactly what it set out to: a local D1 + Pages Functions dev environment
-(T0.5) with a real automated test suite (T0.6, 36 tests) sitting on top of production
+(T0.5) with a real automated test suite (T0.6, 37 tests) sitting on top of production
 housekeeping (T0.1–T0.4: rollback tag, unpinned Wrangler, backup procedure, migration
 tracking) and one security-adjacent cleanup (T0.8). Four real bugs were found and fixed
 with regression tests across the initial build and the first review pass (SAST timezone,
@@ -693,9 +754,14 @@ RSVP day-of-week/window validation, RSVP cancellation blocked by that same valid
 couldn't prove what it claimed) and several infrastructure footguns caught along the way
 (`.gitignore` unanchored patterns, the `wrangler pages dev` D1-binding gotcha, a leaked
 test-server process tree) that would otherwise have caused confusing failures in later
-phases or for future contributors.
+phases or for future contributors. A repo restructure (`chore/git-root`) moved the git
+root from `public/` to the outer folder so `scripts/`, `test/`, `reports/`, and
+`package.json` — previously untracked, single-machine, no-backup — became version
+controlled, closing the gap the checkpoint review's item 5 had flagged as an open
+decision. The branch merged to `main` as a fast-forward and the post-deploy live-Functions
+smoke test (T0.7) passed against `cjnacademy.com`.
 
-Two review checkpoints ran against this branch before the merge, and both earned their
+Three review checkpoints ran against this branch before the merge, and each earned its
 keep by finding real problems the process that built the code did not catch itself:
 
 - The **first** checkpoint found that T0.6's own exit condition ("breaking any assertion
@@ -710,11 +776,16 @@ keep by finding real problems the process that built the code did not catch itse
   after. Also caught: an unpushed branch (Phase 0 existed on one disk), a test file that
   never got migrated to the new safe-spawning pattern, and a factual error in this report's
   own account of what had been committed where.
+- The **third** checkpoint's triage of the remaining 11 second-pass findings
+  (`reports/phase-0-review-triage.md`) caught that a Confirmed, severity-ranked finding
+  (`#3`, hardcoded `'cjn-academy'` outside `devEnv.js`) had gone missing from the *previous*
+  fix summary entirely — neither marked fixed nor carried forward as open. Caught only by
+  re-checking every finding against its file:line, which is now a standing `PLAN.md` rule.
 
-The pattern across both checkpoints: confident claims about correctness or completeness
-are exactly the thing an independent review needs to check, not just take on the word of
-whichever process produced them — including this one's own prior output. Worth carrying
-forward into later phases, not just noting here.
+The pattern across all three checkpoints: confident claims about correctness or
+completeness are exactly the thing an independent review needs to check, not just take on
+the word of whichever process produced them — including this one's own prior output. Worth
+carrying forward into later phases, not just noting here.
 
 Nothing here is user-visible yet — that starts with Phase 1's shared frontend and Phase
 2's capacity/headcount work, both of which now have a local environment and test suite to

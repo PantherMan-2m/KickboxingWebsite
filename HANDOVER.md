@@ -1,4 +1,4 @@
-# Handover — Kickboxing Website (as of 2026-08-05, Phase 0 session)
+# Handover — Kickboxing Website (as of 2026-08-05, Phase 0 session — MERGED to `main`)
 
 ## Read this first
 For anything about how the coach/student login + attendance system actually works (both
@@ -37,11 +37,11 @@ Opus sessions are **planning only** — `PLAN.md`, checkpoint review, triaging r
 verifying claims against the code, writing task specs. Sonnet sessions execute everything
 else. See `PLAN.md`'s "Execution model" section.
 
-## What happened this session (2026-08-05, Phase 0: foundation)
+## What happened this session (2026-08-05, Phase 0: foundation) — DONE, merged to `main`
 Built and verified Phase 0 of `PLAN.md` — the infrastructure every later phase depends on,
-none of it user-visible. T0.1–T0.6 and T0.8 are done; T0.7 (this doc pass + merge) is
-finishing now. Full per-task exit-condition evidence is in
-`reports/phase-0-completion.md`; short version:
+none of it user-visible. T0.1–T0.8 all done, merged to `main` as a fast-forward (`9582248`),
+and T0.7's post-deploy live-Functions smoke test passed against the live site. Full
+per-task exit-condition evidence is in `reports/phase-0-completion.md`; short version:
 
 - **T0.1**: tagged `stable-phase3` (local + pushed) as the pre-Phase-0 rollback point.
 - **T0.2**: dropped the `wrangler@3` pin (Node is now v24.19.0, Wrangler 4.118.0 works
@@ -104,6 +104,18 @@ finishing now. Full per-task exit-condition evidence is in
   unsupported. `resetAndSeed()`'s per-test-file process spawn was re-flagged and deferred
   again, logged in `TODO.md`. Suite is now 37/37. Full file:line detail in
   `reports/phase-0-completion.md`'s "Round 3" section.
+- **Round 4 — git-root restructure and merge** (same day): moved the git repo root from
+  `public/` to this outer folder on branch `chore/git-root` (see "Repo layout" above), then
+  merged to `main` as a fast-forward: `git checkout main && git merge chore/git-root && git
+  push origin main` → `Updating 44edd13..9582248, Fast-forward`. `stable-phase3` reconfirmed
+  unchanged at `44edd13` after. T0.7's post-deploy live-Functions smoke test then ran against
+  `cjnacademy.com` (not a preview): unauthenticated `GET /coach/dashboard.html` and
+  `GET /docs/coach-student-system.md` both `302` to `/login.html` (`cf-cache-status: DYNAMIC`
+  on both, confirming live Function responses, not a cached pre-Phase-0 static file); a real
+  login and the `/coach/students.html` roster load were confirmed manually against the live
+  site. All four checks pass — full detail in `reports/phase-0-completion.md`'s "Round 4"
+  section. `phase-0-foundation` and `chore/git-root` deleted (local + remote) after
+  confirming `main` contains every commit from both.
 
 **Testing approach**: everything above was verified against the new **local** environment
 (T0.5), not production — the whole point of Phase 0 was to stop needing disposable
