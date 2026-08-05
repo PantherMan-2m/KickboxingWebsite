@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=4" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  <script defer src="/app.js?v=1"></script>
 </head>
 <body>
 <header class="site-header">
@@ -49,53 +50,16 @@
 </footer>
 
 <script>
-  document.getElementById('year').textContent = new Date().getFullYear();
-
-  const navMenu = document.querySelector('.nav-links');
-  const menuBtn = document.querySelector('.menu-toggle');
-  menuBtn.addEventListener('click', () => {
-    const isOpen = navMenu.classList.toggle('open');
-    menuBtn.setAttribute('aria-expanded', String(isOpen));
-    document.body.classList.toggle('body-lock', isOpen);
-  });
-  document.querySelectorAll('.nav-links a').forEach((a) => {
-    a.addEventListener('click', () => {
-      navMenu.classList.remove('open');
-      menuBtn.setAttribute('aria-expanded', 'false');
-      document.body.classList.remove('body-lock');
-    });
-  });
-  window.addEventListener('scroll', () => {
-    if (navMenu.classList.contains('open')) {
-      navMenu.classList.remove('open');
-      menuBtn.setAttribute('aria-expanded', 'false');
-      document.body.classList.remove('body-lock');
-    }
-  }, { passive: true });
-
-  document.getElementById('logoutLink').addEventListener('click', async (e) => {
-    e.preventDefault();
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login.html';
-  });
-
   const sessionId = new URLSearchParams(window.location.search).get('id');
   const rosterContainer = document.getElementById('rosterContainer');
   const statuses = ['present', 'absent', 'excused'];
-
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
 
   async function load() {
     if (!sessionId) {
       rosterContainer.innerHTML = '<p>No session specified.</p>';
       return;
     }
-    const response = await fetch(`/api/coach/sessions/${sessionId}`);
-    const data = await response.json();
+    const { data } = await fetchJson(`/api/coach/sessions/${sessionId}`);
     if (!data.ok) {
       rosterContainer.innerHTML = `<p>${data.error || 'Could not load session.'}</p>`;
       return;
@@ -147,12 +111,11 @@
     saveButton.disabled = true;
 
     try {
-      const response = await fetch('/api/coach/mark-attendance', {
+      const { data } = await fetchJson('/api/coach/mark-attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, records }),
       });
-      const data = await response.json();
       status.textContent = data.ok ? 'Saved.' : (data.error || 'Could not save.');
     } catch (error) {
       status.textContent = 'Sorry, something went wrong. Please try again.';
@@ -161,7 +124,9 @@
     }
   });
 
-  load();
+  // Deferred to DOMContentLoaded -- see the comment in coach/attendance.html
+  // for why calling load() directly here would race app.js's fetchJson().
+  document.addEventListener('DOMContentLoaded', load);
 </script>
 </body>
 </html>

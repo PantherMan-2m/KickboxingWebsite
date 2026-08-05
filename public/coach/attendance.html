@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=4" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  <script defer src="/app.js?v=1"></script>
 </head>
 <body>
 <header class="site-header">
@@ -71,36 +72,6 @@
 </footer>
 
 <script>
-  document.getElementById('year').textContent = new Date().getFullYear();
-
-  const navMenu = document.querySelector('.nav-links');
-  const menuBtn = document.querySelector('.menu-toggle');
-  menuBtn.addEventListener('click', () => {
-    const isOpen = navMenu.classList.toggle('open');
-    menuBtn.setAttribute('aria-expanded', String(isOpen));
-    document.body.classList.toggle('body-lock', isOpen);
-  });
-  document.querySelectorAll('.nav-links a').forEach((a) => {
-    a.addEventListener('click', () => {
-      navMenu.classList.remove('open');
-      menuBtn.setAttribute('aria-expanded', 'false');
-      document.body.classList.remove('body-lock');
-    });
-  });
-  window.addEventListener('scroll', () => {
-    if (navMenu.classList.contains('open')) {
-      navMenu.classList.remove('open');
-      menuBtn.setAttribute('aria-expanded', 'false');
-      document.body.classList.remove('body-lock');
-    }
-  }, { passive: true });
-
-  document.getElementById('logoutLink').addEventListener('click', async (e) => {
-    e.preventDefault();
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login.html';
-  });
-
   function todayLocalIso() {
     const d = new Date();
     const offset = d.getTimezoneOffset();
@@ -112,25 +83,17 @@
   dateInput.value = todayLocalIso();
 
   async function createSessionFromTemplate(templateId, date) {
-    const response = await fetch('/api/coach/sessions', {
+    const { data } = await fetchJson('/api/coach/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ templateId, date }),
     });
-    const data = await response.json();
     if (data.ok) window.location.href = `/coach/session.html?id=${data.session.id}`;
-  }
-
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   }
 
   async function loadForDate() {
     const date = dateInput.value;
-    const response = await fetch(`/api/coach/sessions?date=${date}`);
-    const data = await response.json();
+    const { data } = await fetchJson(`/api/coach/sessions?date=${date}`);
     if (!data.ok) return;
 
     const suggestedEl = document.getElementById('suggestedSessions');
@@ -175,7 +138,7 @@
     submitButton.disabled = true;
 
     try {
-      const response = await fetch('/api/coach/sessions', {
+      const { response, data } = await fetchJson('/api/coach/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -185,7 +148,6 @@
           endTime: form.endTime.value || undefined,
         }),
       });
-      const data = await response.json();
 
       if (!response.ok || !data.ok) {
         status.textContent = data.error || 'Could not create session.';
@@ -199,7 +161,13 @@
     }
   });
 
-  loadForDate();
+  // Deferred to DOMContentLoaded, not called immediately: this script runs
+  // during document parsing, before app.js's `defer`red execution (defer
+  // guarantees "before DOMContentLoaded", not "before inline scripts already
+  // in the document" -- an earlier draft of this task assumed the latter).
+  // Calling loadForDate() here directly would reference fetchJson()/escapeHtml()
+  // before app.js has defined them.
+  document.addEventListener('DOMContentLoaded', loadForDate);
 </script>
 </body>
 </html>

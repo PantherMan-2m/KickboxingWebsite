@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=4" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  <script defer src="/app.js?v=1"></script>
 </head>
 <body>
 <header class="site-header">
@@ -78,48 +79,11 @@
 </footer>
 
 <script>
-  document.getElementById('year').textContent = new Date().getFullYear();
-
-  const navMenu = document.querySelector('.nav-links');
-  const menuBtn = document.querySelector('.menu-toggle');
-  menuBtn.addEventListener('click', () => {
-    const isOpen = navMenu.classList.toggle('open');
-    menuBtn.setAttribute('aria-expanded', String(isOpen));
-    document.body.classList.toggle('body-lock', isOpen);
-  });
-  document.querySelectorAll('.nav-links a').forEach((a) => {
-    a.addEventListener('click', () => {
-      navMenu.classList.remove('open');
-      menuBtn.setAttribute('aria-expanded', 'false');
-      document.body.classList.remove('body-lock');
-    });
-  });
-  window.addEventListener('scroll', () => {
-    if (navMenu.classList.contains('open')) {
-      navMenu.classList.remove('open');
-      menuBtn.setAttribute('aria-expanded', 'false');
-      document.body.classList.remove('body-lock');
-    }
-  }, { passive: true });
-
-  document.getElementById('logoutLink').addEventListener('click', async (e) => {
-    e.preventDefault();
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login.html';
-  });
-
   const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const templatesBody = document.getElementById('templatesBody');
 
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
   async function loadTemplates() {
-    const response = await fetch('/api/coach/templates');
-    const data = await response.json();
+    const { data } = await fetchJson('/api/coach/templates');
     if (!data.ok) return;
     if (data.templates.length === 0) {
       templatesBody.innerHTML = '<tr><td colspan="3">No recurring classes set up yet.</td></tr>';
@@ -144,7 +108,7 @@
     submitButton.disabled = true;
 
     try {
-      const response = await fetch('/api/coach/templates', {
+      const { response, data } = await fetchJson('/api/coach/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -154,7 +118,6 @@
           name: form.name.value,
         }),
       });
-      const data = await response.json();
 
       if (!response.ok || !data.ok) {
         status.textContent = data.error || 'Could not save.';
@@ -171,7 +134,9 @@
     }
   });
 
-  loadTemplates();
+  // Deferred to DOMContentLoaded -- see the comment in coach/attendance.html
+  // for why calling loadTemplates() directly here would race app.js's fetchJson().
+  document.addEventListener('DOMContentLoaded', loadTemplates);
 </script>
 </body>
 </html>

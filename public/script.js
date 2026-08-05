@@ -1,37 +1,3 @@
-/* menu-nav update */
-const nav = document.querySelector('.nav-links');
-const btn = document.querySelector('.menu-toggle');
-
-btn.addEventListener('click', () => {
-  const isOpen = nav.classList.toggle('open');
-  btn.setAttribute('aria-expanded', String(isOpen));
-  document.body.classList.toggle('body-lock', isOpen); /* prevent body scroll when menu is open */
-});
-
-// Close menu when a link is clicked (nice UX)
-document.querySelectorAll('.nav-links a').forEach(a => {
-  a.addEventListener('click', () => {
-    nav.classList.remove('open');
-    btn.setAttribute('aria-expanded', 'false');
-    document.body.classList.remove('body-lock');
-  });
-});
-
-// Close the nav menu if user scrolls while it's open
-window.addEventListener('scroll', () => {
-  const nav = document.querySelector('.nav-links');
-  const btn = document.querySelector('.menu-toggle');
-
-  if (nav.classList.contains('open')) {
-    nav.classList.remove('open');
-    btn.setAttribute('aria-expanded', 'false');
-    document.body.classList.remove('body-lock'); // also unlock body scroll if you’re using this
-  }
-}, { passive: true });
-
-/*end of menu-nav update*/
-document.getElementById('year').textContent = new Date().getFullYear();
-
 // // Basic contact form handler (static): opens mail client as a fallback.
 // document.getElementById('contactForm').addEventListener('submit', (e)=>{
 //   e.preventDefault();
