@@ -6,7 +6,8 @@
     {
       "binding": "DB",
       "database_name": "cjn-academy",
-      "database_id": "004b5cdb-6779-42f3-bb07-def9eeca1852"
+      "database_id": "004b5cdb-6779-42f3-bb07-def9eeca1852",
+      "migrations_dir": "migrations"
     }
   ]
 }

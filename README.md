@@ -46,9 +46,8 @@ class attendance.
   declares the same binding for local dev via `wrangler pages dev`.
 - Schema lives in `migrations/0001_initial.sql` — apply it with:
   ```
-  npx wrangler@3 d1 execute cjn-academy --remote --file=./migrations/0001_initial.sql
+  npx wrangler d1 execute cjn-academy --remote --file=./migrations/0001_initial.sql
   ```
-  (older `@3` pinned because this project's Node version predates what current Wrangler requires — see below.)
 - Student invite emails reuse the existing `RESEND_API_KEY` (see Contact Form section) via
   `functions/api/_utils/email.js`.
 - There's no self-signup yet — the first coach account is created locally with
@@ -58,9 +57,8 @@ class attendance.
   node bootstrap-user.js "coach@example.com" "Coach Name" coach
   ```
   It prints a SQL `INSERT` to run via `wrangler d1 execute`.
-- **Wrangler version note**: the latest Wrangler requires Node 22+; this project's local
-  Node is older, so `wrangler@3` is used explicitly for any `wrangler d1`/`wrangler pages`
-  commands until Node is upgraded.
+- **Wrangler version note**: requires Node 22+ (current: Node 24) to run unpinned
+  `wrangler` (4.x) for any `wrangler d1`/`wrangler pages` commands.
 
 ## Analytics & SEO
 - Add a Google Analytics tag (optional).
