@@ -1,5 +1,3 @@
-/node_modules/
-/package.json
-/package-lock.json
-/Server.js
+node_modules/
+backups/
 .wrangler/

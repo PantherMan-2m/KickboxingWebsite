@@ -1,0 +1,21 @@
+{
+  "name": "host-website",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.mjs\"",
+    "dev": "node scripts/dev-server.js",
+    "dev:lan": "node Server.js",
+    "db:reset": "node scripts/db-reset-seed.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.119.0"
+  }
+}
