@@ -95,34 +95,46 @@ node bootstrap-user.js "email@example.com" "Full Name" coach
 (run from the outer project folder, not `public/`). It prompts for a password locally
 (masked, never sent anywhere) and prints a SQL `INSERT` statement to run via:
 ```bash
-npx wrangler@3 d1 execute cjn-academy --remote --command="<paste the INSERT>"
+npx wrangler d1 execute cjn-academy --remote --command="<paste the INSERT>"
 ```
 
 ## Common maintenance tasks
 
-All of these use `wrangler@3` (pinned — see "Why wrangler@3" below) from the `public/`
-folder:
+All of these use `wrangler` (unpinned — requires Node 22+, see "Stack" below) from the
+`public/` folder:
+
+**Back up production before every migration** (standing rule — never run a migration
+against production without a fresh export in hand):
+```bash
+npx wrangler d1 export cjn-academy --remote --output="../backups/cjn-academy-<YYYY-MM-DD>.sql"
+```
+Run from `public/`. Writes to a `backups/` folder in the **outer** project folder (sibling
+to `public/`, not inside it), so the export — which contains real user data, including
+password hashes — is never committed to git. Exports schema and data for all tables in one
+file. To restore, replay the file's `CREATE TABLE`/`INSERT` statements against a target
+database (e.g. `npx wrangler d1 execute cjn-academy --remote --file=../backups/<file>.sql`
+— only ever do this deliberately, it's a full overwrite).
 
 **Force-unlock a locked-out account immediately** (instead of waiting 15 min):
 ```bash
-npx wrangler@3 d1 execute cjn-academy --remote --command="UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE email = 'someone@example.com';"
+npx wrangler d1 execute cjn-academy --remote --command="UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE email = 'someone@example.com';"
 ```
 
 **Reset someone's password** (e.g. they forgot it — there's no self-service "forgot
 password" flow yet): generate a new hash with `bootstrap-user.js`'s hashing logic (or
 just run the script again mentally — same PBKDF2 format), then:
 ```bash
-npx wrangler@3 d1 execute cjn-academy --remote --command="UPDATE users SET password_hash = '<hash>', must_change_password = 1 WHERE email = '...';"
+npx wrangler d1 execute cjn-academy --remote --command="UPDATE users SET password_hash = '<hash>', must_change_password = 1 WHERE email = '...';"
 ```
 
 **Deactivate/reactivate a student without the UI**:
 ```bash
-npx wrangler@3 d1 execute cjn-academy --remote --command="UPDATE users SET status = 'inactive' WHERE email = '...';"
+npx wrangler d1 execute cjn-academy --remote --command="UPDATE users SET status = 'inactive' WHERE email = '...';"
 ```
 
 **Look at the data directly**:
 ```bash
-npx wrangler@3 d1 execute cjn-academy --remote --command="SELECT * FROM users;"
+npx wrangler d1 execute cjn-academy --remote --command="SELECT * FROM users;"
 ```
 
 ---
@@ -136,15 +148,127 @@ npm dependencies bundled into the deployed site — everything uses what's nativ
 available in the Workers runtime (Web Crypto API, `crypto.randomUUID()`).
 
 Git repo root is `public/` (see main `HANDOVER.md` for the full repo-structure history).
-`wrangler.jsonc` at the repo root declares the D1 binding (`DB`) for local dev; the
-*production* binding is set via the Cloudflare Pages dashboard (Settings → Bindings),
-not read from `wrangler.jsonc` for the live Git-integrated deploy.
+`wrangler.jsonc` at the repo root declares the `DB` binding's `database_name`/`database_id`
+or migration tracking (`wrangler d1 migrations`/`d1 execute`); the *production* binding is
+set via the Cloudflare Pages dashboard (Settings → Bindings), not read from `wrangler.jsonc`
+for the live Git-integrated deploy. **`wrangler pages dev` does NOT auto-bind D1 from this
+config** — see "Local development environment" below for the (non-obvious) reason and fix.
 
-## Why `wrangler@3`
+## Local development environment
 
-This machine's Node is v18; current Wrangler requires Node 22+. All `wrangler d1`/
-`wrangler pages` commands in this project use `npx wrangler@3` explicitly. Upgrading
-Node would remove the need for the pin.
+`npm run dev` (from the **outer** project folder, not `public/`) starts
+`wrangler pages dev`, serving `public/` with Functions and a **local** D1 database bound as
+`DB` — the environment every phase from here on is verified against, replacing the old
+approach of testing against production with disposable accounts.
+
+`npm run db:reset` (also from the outer folder) wipes the local D1 entirely, re-applies
+every migration from scratch, and loads deterministic seed data: two coaches
+(`coach@seed.test` / `CoachPass123!`, and `coachmustchange@seed.test` reserved for the
+coach-side must-change-password route-protection test), and six students covering every
+status the app cares about — two `active`, one `inactive`, one `pending`, one `active`
+with `must_change_password` set, and one `active` reserved exclusively for the automated
+lockout test (`lockout1@seed.test` — never log in as this user manually, the test suite
+deliberately locks it) — plus four weekly class templates (Mon/Wed/Fri active, Sat
+inactive, to prove the "active only" filter) and two historical sessions with a mixed
+present/absent/excused attendance roster. Safe to run repeatedly; each run starts from a
+clean slate, so it always produces the same eight users, four templates, two sessions, and
+six attendance rows.
+
+**Non-obvious gotcha, verified 2026-08-05 (wrangler 4.118.0), worth preserving**:
+`wrangler pages dev` does not read `d1_databases` from `wrangler.jsonc` the way `wrangler
+dev` (plain Workers) does — without an explicit `--d1` flag, `env.DB` is simply undefined
+and every Functions handler that touches the database throws. Worse, `--d1=DB=cjn-academy`
+(binding `=` the database **name**) silently creates a *different, empty* local D1 instance
+than the one `wrangler d1 migrations apply --local` / `wrangler d1 execute --local` operate
+on — those resolve the target database via `wrangler.jsonc`'s config, keyed off
+`database_id`, not `database_name`. The fix, implemented in `scripts/dev-server.js`: pass
+`--d1=DB=<database_id>` (the UUID, not the name) so both code paths resolve to the same
+underlying local `.sqlite` file under `public/.wrangler/state/v3/d1/` (gitignored). Get this
+wrong and local dev looks broken in a confusing way — D1 queries either throw
+`Cannot read properties of undefined` (no `--d1` at all) or `no such table: users` (`--d1`
+present but pointed at the wrong, unmigrated local database).
+
+Scripts (all defined in the outer folder's `package.json`, run from there):
+- `npm run dev` — start the full local environment (`scripts/dev-server.js`).
+- `npm run db:reset` — wipe + re-migrate + seed the local D1 (`scripts/db-reset-seed.js`).
+- `npm run dev:lan` — the old `Server.js` Express static server for LAN preview from a
+  phone/other device on the network; does **not** serve Functions or D1, kept only for
+  that narrower use case.
+
+## Automated tests
+
+`npm test` (outer folder) runs the full suite via Node 24's built-in test runner —
+no new dependencies, nothing to bundle. Test files live in the outer folder's `test/`
+(untracked, same convention as `scripts/`, `Server.js`, `bootstrap-user.js`):
+
+- `test/unit/` — pure functions imported directly (`dates.js`, `auth.js`'s password
+  hashing); no server needed, runs in milliseconds.
+- `test/integration/` — real HTTP requests against a live `wrangler pages dev` instance on
+  a **dedicated port (8799)**, separate from `npm run dev`'s 8788, so running the suite
+  never fights a dev server you left open. Each integration test file resets+reseeds the
+  local D1 and starts/stops its own server instance in `before`/`after` hooks
+  (`test/helpers/server.mjs`) — this makes any single file runnable standalone
+  (`node --test test/integration/rsvp.test.mjs`) for debugging, at the cost of the full
+  suite needing serial file execution (`--test-concurrency=1`, already set in the `test`
+  script) so two files' servers never collide on the same port. This is why the full
+  suite takes ~2 minutes — each integration file pays its own ~5-10s server-startup cost.
+  Coverage: login (success/wrong-password/nonexistent/inactive/pending, and that every
+  failure mode returns a byte-identical response), lockout (5 failures locks, correct
+  password still rejected during the window), all four route-protection middlewares
+  (unauthenticated/wrong-role/must-change-password), and RSVP (create/delete round-trip,
+  past-date rejection, and the T0.6b day-of-week/window regressions below).
+
+**Reserved seeded accounts — never log into these manually**, the test suite mutates
+their state on purpose: `lockout1@seed.test` (deliberately locked by the lockout test),
+`coachmustchange@seed.test` / `mustchange1@seed.test` (used for must-change-password
+redirect checks).
+
+**Regression tests (T0.6b)**, both written failing-first and confirmed passing after the
+fix (see `reports/phase-0-completion.md` in the outer folder for the actual before/after
+command output):
+1. `test/unit/dates.test.mjs` — `todayIso()` returning the UTC date instead of the SAST
+   (Africa/Johannesburg, UTC+2 fixed) calendar date for roughly two hours after UTC
+   midnight. Fixed by adding a fixed +2h offset before formatting; `todayIso()` now takes
+   an optional `now` argument (defaults to the real clock) purely so the bug is testable
+   without mocking global time.
+2. `test/integration/rsvp.test.mjs` — `POST /api/student/rsvp` accepted a date whose
+   day-of-week didn't match the template, or one outside the 7-day window the UI offers.
+   Fixed in `rsvp.js` by checking `dayOfWeekFor(date) === template.day_of_week` and that
+   `date` falls within `[todayIso(), todayIso()+6]`.
+
+**Bonus fix found while writing the date-helper tests, outside T0.6b's original two
+named bugs**: `isValidDate('2026-02-30')` returned `true`, because `new Date(...)`
+silently normalizes overflowing calendar components (Feb 30 → Mar 2) instead of
+producing `NaN`. Fixed by round-tripping the parsed date back to a string and comparing
+against the input.
+
+## Migration tracking
+
+`wrangler.jsonc` declares `migrations_dir: "migrations"` on the `DB` binding, so
+`wrangler d1 migrations list/apply` (local and `--remote`) tracks applied migrations via
+a `d1_migrations` table, instead of migrations being run by hand with `d1 execute`.
+
+**One-time reconciliation (done 2026-08-05, not to be repeated)**: production already had
+`0001_initial.sql` and `0002_session_rsvps.sql` applied by hand before migration tracking
+was adopted, but D1 provisions an empty `d1_migrations` table by default — it had zero
+rows, which would have made Wrangler try to re-run `0001` against tables that already
+exist. Fixed by inserting rows recording both as already applied, without re-running
+their SQL:
+```sql
+INSERT INTO d1_migrations (name, applied_at) VALUES
+  ('0001_initial.sql', '<actual apply timestamp>'),
+  ('0002_session_rsvps.sql', '<actual apply timestamp>');
+```
+Any *new* migration from here on should be created with
+`wrangler d1 migrations create cjn-academy <name>` and applied with
+`wrangler d1 migrations apply cjn-academy --remote` (after a fresh backup, see below) —
+never with a raw `d1 execute --file=...`, which wouldn't record itself in `d1_migrations`
+and would reintroduce the same mismatch this reconciliation fixed.
+
+## Node/Wrangler requirement
+
+This project requires Node 22+ (current: Node 24.19.0) to run unpinned `wrangler` (4.x).
+All `wrangler d1`/`wrangler pages` commands in this project use plain `npx wrangler`.
 
 ## Database schema
 
