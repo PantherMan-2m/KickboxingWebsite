@@ -165,14 +165,16 @@ approach of testing against production with disposable accounts.
 every migration from scratch, and loads deterministic seed data: two coaches
 (`coach@seed.test` / `CoachPass123!`, and `coachmustchange@seed.test` reserved for the
 coach-side must-change-password route-protection test), and six students covering every
-status the app cares about — two `active`, one `inactive`, one `pending`, one `active`
-with `must_change_password` set, and one `active` reserved exclusively for the automated
-lockout test (`lockout1@seed.test` — never log in as this user manually, the test suite
-deliberately locks it) — plus four weekly class templates (Mon/Wed/Fri active, Sat
-inactive, to prove the "active only" filter) and two historical sessions with a mixed
-present/absent/excused attendance roster. Safe to run repeatedly; each run starts from a
-clean slate, so it always produces the same eight users, four templates, two sessions, and
-six attendance rows.
+status the app cares about — two `active`, one `inactive`, one `pending` (`pending1@seed.test`
+/ `PendingPass123!` — deliberately a **known** password, unlike the real request-account
+flow, so a test can prove login is blocked by `status='pending'` itself and not just by an
+unknown password), one `active` with `must_change_password` set, and one `active` reserved
+exclusively for the automated lockout test (`lockout1@seed.test` — never log in as this
+user manually, the test suite deliberately locks it) — plus four weekly class templates
+(Mon/Wed/Fri active, Sat inactive, to prove the "active only" filter) and two historical
+sessions with a mixed present/absent/excused attendance roster. Safe to run repeatedly;
+each run starts from a clean slate, so it always produces the same eight users, four
+templates, two sessions, and six attendance rows.
 
 **Non-obvious gotcha, verified 2026-08-05 (wrangler 4.118.0), worth preserving**:
 `wrangler pages dev` does not read `d1_databases` from `wrangler.jsonc` the way `wrangler
@@ -181,12 +183,24 @@ and every Functions handler that touches the database throws. Worse, `--d1=DB=cj
 (binding `=` the database **name**) silently creates a *different, empty* local D1 instance
 than the one `wrangler d1 migrations apply --local` / `wrangler d1 execute --local` operate
 on — those resolve the target database via `wrangler.jsonc`'s config, keyed off
-`database_id`, not `database_name`. The fix, implemented in `scripts/dev-server.js`: pass
-`--d1=DB=<database_id>` (the UUID, not the name) so both code paths resolve to the same
-underlying local `.sqlite` file under `public/.wrangler/state/v3/d1/` (gitignored). Get this
-wrong and local dev looks broken in a confusing way — D1 queries either throw
-`Cannot read properties of undefined` (no `--d1` at all) or `no such table: users` (`--d1`
-present but pointed at the wrong, unmigrated local database).
+`database_id`, not `database_name`. The fix, implemented once in `scripts/lib/devEnv.js`
+(shared by `dev-server.js`, `db-reset-seed.js`, and `test/helpers/server.mjs` — an earlier
+version had this duplicated three times, and one copy silently drifted by hardcoding the
+binding name instead of reading it from config): pass `--d1=DB=<database_id>` (the UUID,
+not the name) so all code paths resolve to the same underlying local `.sqlite` file under
+`public/.wrangler/state/v3/d1/` (gitignored). Get this wrong and local dev looks broken in
+a confusing way — D1 queries either throw `Cannot read properties of undefined` (no `--d1`
+at all) or `no such table: users` (`--d1` present but pointed at the wrong, unmigrated
+local database).
+
+`devEnv.js` also exports `wranglerCommand()`/`runWrangler()`, which spawn `npx wrangler
+<args>` as a real argv array rather than a `shell:true` joined string — `npx` is a `.cmd`
+shim on Windows (Node can't exec it directly without a shell, confirmed: fails with
+`EINVAL`), so on Windows this routes through `cmd.exe /d /s /c npx wrangler <args>` as its
+own argv array; on POSIX, `npx` is a real executable and needs no shell layer at all.
+Avoiding `shell:true` removes the need for any hand-rolled command-line escaping (Node's
+own per-argument quoting handles it), and lets `test/helpers/server.mjs` spawn with
+`detached: true` on POSIX so its process tree can actually be killed as a group afterward.
 
 Scripts (all defined in the outer folder's `package.json`, run from there):
 - `npm run dev` — start the full local environment (`scripts/dev-server.js`).
@@ -214,14 +228,18 @@ no new dependencies, nothing to bundle. Test files live in the outer folder's `t
   suite takes ~2 minutes — each integration file pays its own ~5-10s server-startup cost.
   Coverage: login (success/wrong-password/nonexistent/inactive/pending, and that every
   failure mode returns a byte-identical response), lockout (5 failures locks, correct
-  password still rejected during the window), all four route-protection middlewares
-  (unauthenticated/wrong-role/must-change-password), and RSVP (create/delete round-trip,
-  past-date rejection, and the T0.6b day-of-week/window regressions below).
+  password still rejected during the window), all five route-protection middlewares
+  (unauthenticated/wrong-role/must-change-password — coach pages, student pages, coach
+  API, student API, and `/docs/*`), and RSVP (create/delete round-trip, past-date
+  rejection, and the T0.6b day-of-week/window regressions below).
+- `test/helpers/auth.mjs` — the shared `login(email, password)` helper every integration
+  test file uses; returns `{res, cookie}`, callers read the body themselves.
 
 **Reserved seeded accounts — never log into these manually**, the test suite mutates
 their state on purpose: `lockout1@seed.test` (deliberately locked by the lockout test),
 `coachmustchange@seed.test` / `mustchange1@seed.test` (used for must-change-password
-redirect checks).
+redirect checks). `pending1@seed.test` has a known password *on purpose* (see above) but
+is otherwise safe to reference — its account state is never mutated by a test.
 
 **Regression tests (T0.6b)**, both written failing-first and confirmed passing after the
 fix (see `reports/phase-0-completion.md` in the outer folder for the actual before/after
@@ -234,13 +252,25 @@ command output):
 2. `test/integration/rsvp.test.mjs` — `POST /api/student/rsvp` accepted a date whose
    day-of-week didn't match the template, or one outside the 7-day window the UI offers.
    Fixed in `rsvp.js` by checking `dayOfWeekFor(date) === template.day_of_week` and that
-   `date` falls within `[todayIso(), todayIso()+6]`.
+   `date` falls within `[todayIso(), todayIso()+6]`. **This validation applies to
+   creating an RSVP only (`going === true`)** — a follow-up review found the first version
+   also blocked *cancelling* an RSVP that failed these checks (e.g. a row created before
+   this fix, or one whose template's `day_of_week` changed afterward), which would have
+   made such a row permanently stuck. Cancellation (`going === false`) now requires only
+   that the row belongs to the caller.
 
 **Bonus fix found while writing the date-helper tests, outside T0.6b's original two
 named bugs**: `isValidDate('2026-02-30')` returned `true`, because `new Date(...)`
 silently normalizes overflowing calendar components (Feb 30 → Mar 2) instead of
 producing `NaN`. Fixed by round-tripping the parsed date back to a string and comparing
 against the input.
+
+**Found in the same follow-up review**: `rsvp.js` destructured the parsed JSON body
+without checking it was non-null first — a literal JSON `null` body parses successfully
+(not a `.json()` error), so it reached an unguarded destructure and crashed with an
+uncaught 500 instead of a graceful 400. Fixed with an explicit
+`if (!body || typeof body !== 'object')` guard. The same pattern exists in several other
+handlers that parse a JSON body; not fixed elsewhere in this pass, logged in `TODO.md`.
 
 ## Migration tracking
 
