@@ -22,8 +22,11 @@ Read this section before executing anything.
    touching live Cloudflare settings. Present the exact command and wait.
 4. **Never `--remote` without a current backup.** See T0.3. This is not negotiable once payment
    records exist.
-5. **Bump the `styles.css?v=` query string on every CSS change**, on every page that references
-   it. This has caused stale-CSS incidents twice already.
+5. **Version-stamp every cacheable static asset, and bump it on every change**, on every page
+   that references it. Today that means `styles.css?v=`; from T1.1 it also means `app.js?v=`.
+   Cloudflare serves the HTML with `max-age=0` but gives static assets a 4-hour browser cache,
+   so an unversioned asset means a bad deploy is unfixable for four hours across every page at
+   once. This has caused stale-CSS incidents twice already (`1d102bd`).
 6. **Work on a feature branch per phase** (`phase-1-shared-frontend`, etc.), not directly on
    `main`. This is a change from the Phase 1–3 convention; see T0.7.
 
@@ -32,7 +35,10 @@ Read this section before executing anything.
 Do not "improve" these without raising it first — they are deliberate:
 
 - No build step, no bundler, no npm dependencies in the deployed site. Workers-native APIs only.
-- Git repo root is `public/`. Pages Functions live in `public/functions/`.
+- **Git repo root is the outer project folder** (moved from `public/` in `f0c3ec8`, Phase 0).
+  The deployed site is `public/`; Pages Functions live in `public/functions/`; Cloudflare Pages'
+  **Root directory** setting is `public`. `scripts/`, `test/`, `reports/`, and `package.json`
+  are tracked; `backups/` is gitignored and must never be staged — it holds real user data.
 - Underscore-prefixed folders (`_utils`) are excluded from Pages routing but are importable.
 - All auth failures return an identical generic 401 — do not add specific error messages.
 - Commit messages are prefixed `feat:` / `fix:` / `chore:` / `docs:`.
@@ -443,6 +449,21 @@ produce. Doing it after the foundation but before the features is the only time 
 **Risk note**: this touches every page of a working site. It happens on a branch, with
 `stable-phase3` as the fallback, and every page is verified individually.
 
+**What Phase 0 changed for this phase** (reviewed at the Phase 0 → 1 checkpoint, 2026-08-05).
+The phase's shape is unchanged — still T1.1–T1.3, still the right next phase, still the cheap
+moment to do it. Three things carry over:
+
+1. **There is now a local environment to verify against** (`npm run dev`), so no part of Phase 1
+   needs a production test account. Nothing here touches D1, so there is no migration, no backup
+   gate, and no `--remote` command in the entire phase.
+2. **The test suite cannot see any of this phase's exit conditions.** It is HTTP-only: no DOM, no
+   console, no click. Every T1.1/T1.2 exit condition is browser-observable. T1.1 now specifies
+   the verification method rather than leaving it implied — this is the direct application of
+   Phase 0's recurring lesson, that a claim nothing mechanically checks is a claim that survives
+   review while being false.
+3. **The repo root moved** (`f0c3ec8`), so `app.js` at `public/app.js` is tracked normally and
+   git commands run from the outer folder. The docs have not all caught up — see T1.3.
+
 ---
 
 ### T1.1 — Extract shared frontend code into `app.js`
@@ -450,28 +471,86 @@ produce. Doing it after the foundation but before the features is the only time 
 **Depends on**: T0.7 (needs the local environment and test suite).
 **Runs as**: Sonnet.
 
-Every authenticated page currently carries its own copy of: the hamburger-menu toggle logic,
-the logout click handler, and `escapeHtml`. That is ~30 lines duplicated across 8 pages.
+**Verified inventory** (checked against the code at the Phase 1 checkpoint, 2026-08-05 — do not
+re-derive, but do report if any of it has drifted):
 
-Create `public/app.js` containing the shared behaviour. Note the existing constraint that
-caused this duplication: `public/script.js` cannot be reused because it references homepage-only
-elements (`#contactForm`) and throws on other pages. `app.js` must be written so it is safe to
-load on **any** page — every DOM lookup guarded, no assumption that an element exists.
+| Duplicated block | Lines each | Pages |
+|---|---|---|
+| Nav/hamburger (toggle, close-on-link, close-on-scroll, body lock) | ~21 | 8 authenticated + `index.html` (in `script.js`) |
+| Logout click handler | 5 | 8 authenticated |
+| `escapeHtml` | 5 | 7 (all authenticated except `coach/dashboard.html`) |
+| `#year` footer stamp | 1 | all 12 |
 
-Extract at minimum: nav/hamburger behaviour, logout handling, `escapeHtml`, and a small
-`fetch` JSON wrapper (every page currently repeats the same `fetch` → `.json()` → `if (data.ok)`
-shape).
+That is ~255 duplicated lines, not the ~30 an earlier draft of this task claimed. All 12 pages
+currently carry a single inline `<script>` at the end of `<body>`; there is no external JS
+anywhere except `index.html`'s `script.js`.
 
-Do **not** change `script.js` or `functions/api/contact.js` in this task. Both work; leave them.
+`login.html`, `change-password.html`, and `request-account.html` have a **logo-only header** —
+no `.menu-toggle`, no `.nav-links`, no logout link. This is why every DOM lookup in `app.js`
+must be guarded: those three pages will load it and find almost nothing.
 
-**Exit condition**, verified page by page against the local environment:
-- All 8 authenticated pages plus `index.html`, `login.html`, `request-account.html`, and
-  `change-password.html` load with **zero console errors**.
-- The hamburger menu opens, closes on link click, closes on scroll, and locks body scroll — on
-  every page that has one.
-- Logout works from every page that offers it, and lands on `/login.html`.
-- The contact form on `index.html` still submits (proving `script.js` is untouched and
-  uncorrupted by the new file loading alongside it).
+Create `public/app.js` containing the shared behaviour. Extract at minimum: nav/hamburger
+behaviour, logout handling, `escapeHtml`, the `#year` stamp, and a small `fetch` JSON wrapper
+(every page repeats the same `fetch` → `.json()` → `if (data.ok)` shape).
+
+#### The `script.js` collision — read this before writing anything
+
+`public/script.js:2-30` **already implements the identical hamburger logic** for `index.html`,
+and `script.js:33` already does the `#year` stamp. Load `app.js` alongside it unchanged and both
+bind a click listener to the same `.menu-toggle`; both call `classList.toggle('open')`; the
+class toggles twice per click and **the menu never opens**. An earlier draft of this task said
+"do not change `script.js`" while also requiring `app.js` on `index.html` and a working
+hamburger on every page — those three requirements cannot all hold.
+
+**Resolution (decided by Giovanni, 2026-08-05)**: delete `script.js:1-33` — the nav block and
+the `#year` line — and let `app.js` own them on `index.html` too. Everything below stays exactly
+as it is:
+
+- the contact-form submit handler (`script.js:51-78`) — untouched, and `functions/api/contact.js`
+  is not part of this task either;
+- the hide-header-on-scroll effect (`script.js:80-97`) — **stays in `script.js`, homepage-only**.
+  It is deliberately not extracted: spreading it to 8 authenticated pages is a visible UX change
+  and does not belong inside a refactor commit. Record the divergence in the completion report.
+
+The history was checked for a reason the homepage needed its own menu implementation: there
+isn't one. `066ff64` states the coach/student pages *replicated the homepage's* pattern inline
+purely because no shared module existed, and the only documented blocker — `script.js`
+referencing `#contactForm` — is about loading `script.js` elsewhere, not the reverse.
+
+#### Load pattern — identical on all 12 pages, no variation
+
+- `<script defer src="/app.js?v=1"></script>` in `<head>`. **Absolute path**, because pages sit
+  at two directory depths (`/index.html` and `/coach/session.html`); a relative `app.js` breaks
+  in one of them. **Versioned**, per this document's rule 5 — a new asset with a 4-hour
+  Cloudflare cache and no version string is unfixable for four hours after a bad deploy.
+- `defer` guarantees it executes after the DOM is parsed and **before** each page's existing
+  inline block at the end of `<body>`, so helpers like `escapeHtml` are defined by the time that
+  block runs. Do not use `async`; do not drop `defer` and leave it in `<head>`.
+- `index.html` keeps `<script src="script.js"></script>` where it is, after `app.js`.
+
+#### Verification method (this phase has no mechanical check without one)
+
+Phase 0's suite is HTTP-only — it cannot see a console error or a stuck menu, and every exit
+condition below is DOM-observable. Phase 0's own lesson was that a confident claim survived two
+review passes because nothing mechanically checked it. So do both:
+
+1. **Browser-driven, per page.** With `npm run dev` running, load each of the 12 pages in the
+   browser tool and capture console output. Paste the actual per-page result into the completion
+   report — 12 lines of evidence, not one sentence claiming they were all fine.
+2. **A grep-shaped regression test**, added to the suite: for each of the 12 pages, assert the
+   served HTML references `/app.js?v=` and no longer contains `menuBtn.addEventListener` or
+   `function escapeHtml`. The realistic failure mode across 12 near-identical files is *missing
+   one*, and that is exactly what a human page-by-page sweep is worst at catching.
+
+**Exit condition**:
+- All 12 pages load with **zero console errors**, evidenced per page.
+- The hamburger opens, closes on link click, closes on scroll, and locks body scroll — on all 9
+  pages that have one, **`index.html` included** (this is the one the collision above breaks;
+  test it deliberately, don't assume).
+- Logout works from every page that offers it and lands on `/login.html`.
+- The contact form on `index.html` still submits, and the header still hides on scroll-down
+  there — proving the surviving half of `script.js` is intact.
+- The new grep-shaped test passes, and fails if `app.js` is removed from any one page.
 - Net line count across the touched files is **lower** than before. If it isn't, the extraction
   didn't achieve anything — report rather than proceeding.
 - `styles.css?v=` bumped on every page if any CSS changed; unchanged if none did.
@@ -495,8 +574,32 @@ Three specific gaps identified by Giovanni:
 For (2), note the architectural constraint: `index.html` is a **static public page with no
 middleware**, so it cannot know server-side whether the visitor is logged in. Resolve with a
 lightweight client-side check — a small public endpoint returning session state (name + role,
-nothing sensitive) that the homepage calls to swap "Login" for "My dashboard". Do not put this
-behind the auth middleware; it must be callable by anonymous visitors and simply answer "no".
+nothing sensitive) that the homepage calls to swap "Login" for "My dashboard".
+
+**Endpoint spec.** Put it at `public/functions/api/auth/session.js`. Verified: `functions/api/`
+has middleware only under `api/coach/` and `api/student/`, so anything under `api/auth/` is
+public by construction — no exclusion needed, and nothing to add to a middleware.
+
+- Reuse `getSessionUser(context)` from `_utils/auth.js`. It returns `null` or
+  `{sessionId, user:{id, email, name, role, mustChangePassword}}`.
+- **Whitelist the two fields explicitly** — `{ok:true, user:{name, role}}`. Do not spread or
+  return `session.user`, which carries `id`, `email`, and `mustChangePassword`. A spread here is
+  the entire leak, and it is one character away from correct.
+- Anonymous → `200 {ok:true, user:null}`. **Not** a 401, not a redirect. A 401 in the console on
+  every homepage visit makes the public site look broken to anyone who opens devtools, and it
+  trains the next person to ignore console noise.
+
+For (3), `/coach/session.html`'s back link needs a target that preserves the date, and
+**`/coach/attendance.html` cannot currently accept one**: `attendance.html` sets
+`dateInput.value = todayLocalIso()` unconditionally on load and never reads the URL. So this is
+two changes, not one:
+
+- `attendance.html` reads `?date=YYYY-MM-DD`, validates it (reject a malformed value rather than
+  feeding garbage to the date input), and falls back to today when absent or invalid.
+- `session.html` builds the link as `/coach/attendance.html?date=${data.session.date}` once its
+  fetch resolves. The session's date is already in the API response — no new endpoint. Render a
+  plain `/coach/attendance.html` link immediately so there is never a window where the page has
+  no way back; upgrade the `href` when the date arrives.
 
 Audit every page for the same class of dead end while in here, and fix any others found.
 
@@ -506,10 +609,18 @@ Audit every page for the same class of dead end while in here, and fix any other
   `/student/dashboard.html`; logged out, the existing "Login" link, unchanged.
 - The session-state endpoint returns a negative answer for anonymous visitors **without** a 401,
   redirect, or console error — the homepage must not appear broken to the public.
-- The endpoint leaks nothing beyond name and role. Explicitly: no email, no id, no status.
+- The endpoint leaks nothing beyond name and role. Explicitly: no email, no id, no
+  `mustChangePassword`. **Assert the exact key set** in a test (`Object.keys(body.user)`), not
+  just that the expected fields are present — a test that only checks `name` and `role` are
+  there passes just as happily when `email` is there too.
+- Integration tests cover all three cases: anonymous, coach, student. This is a new public
+  endpoint; Phase 0's route-protection suite is the place it belongs.
 - `/coach/session.html` has a back link returning to `/coach/attendance.html` with the same date
-  still selected — not just a bare back link that loses context.
-- Verified on mobile viewport as well as desktop.
+  still selected — demonstrated by opening a session for a **non-today** date and confirming the
+  date input comes back on that date, not today.
+- `attendance.html?date=` with a malformed value (`?date=banana`, `?date=2026-02-30`) falls back
+  to today without a console error.
+- Verified on mobile viewport as well as desktop, using T1.1's browser-driven method.
 
 ---
 
@@ -519,10 +630,46 @@ Audit every page for the same class of dead end while in here, and fix any other
 **Runs as**: Sonnet, `[HUMAN GATE]` on merge/push.
 
 Update `coach-student-system.md`'s "Frontend notes" section — the claim that every page has its
-own inline script and that no shared module exists becomes false with T1.1.
+own inline script and that no shared module exists becomes false with T1.1. Specifically
+`coach-student-system.md:411-415` (no shared module, `script.js` unusable elsewhere) and
+`:427-430` ("each page has its own copy of that JS"). Add `/api/auth/session` to the API
+reference table, and `app.js` to "Shared code".
 
-**Exit condition**: docs accurate, branch merged after confirmation, deployed site verified
-working on the four highest-traffic pages (homepage, login, coach dashboard, student dashboard).
+**Stale claims found at the Phase 1 checkpoint** — all pre-existing, none caused by Phase 1, all
+in `coach-student-system.md`, all verified against the code on 2026-08-05. Fix them in this same
+pass rather than leaving a doc that is wrong about the repo it documents:
+
+- `:150` — "Git repo root is `public/`". False since `f0c3ec8`; it is the outer folder.
+- `:229` — describes `test/` as "untracked, same convention as `scripts/`". Both are tracked now,
+  for the same reason (`f0c3ec8`).
+- `:313-314` — "All `wrangler d1`/`wrangler pages` commands in this project use plain
+  `npx wrangler`". The documented maintenance commands do; the local tooling deliberately does
+  not, and the paragraph at `:196-216` explains at length why. Scope the claim to the former.
+- `:366` — "Four middleware files". There are five: `docs/_middleware.js` was added by T0.8, and
+  this same document already says five at `:244`.
+- `:3` — the status line still reads "Phase 1, Phase 2 and Phase 3 complete (2026-08-04)" with no
+  mention of Phase 0.
+
+**Also log to `TODO.md`, do not fix here** (Bucket 2 — real, out of scope, and it belongs to the
+phase that actually depends on it): `coach/attendance.html`'s `todayLocalIso()` computes "today"
+from the **browser's** timezone, a third notion of today alongside the server's SAST `todayIso()`
+fixed in T0.6b. They agree for a coach physically in South Africa and disagree for a traveller or
+anyone on a VPN. Phase 2's next-class panel (T2.3) builds directly on this ground and is where it
+should be resolved.
+
+**Exit condition**:
+- Docs accurate — no remaining stale claim from the list above, verified by re-reading each named
+  line, not by grepping for a fix summary.
+- `/code-review ultra` run on the branch before merge, and its findings triaged per this
+  document's four-bucket rule with each finding re-checked at the `file:line` it names.
+- `reports/phase-1-completion.md` written with per-task evidence, including the 12-page console
+  capture from T1.1.
+- Branch merged after confirmation.
+- **Post-deploy verification against the live site**, not a preview: homepage, login, coach
+  dashboard, student dashboard all load with no console error, the homepage swaps "Login" for
+  "My dashboard" when logged in, and the contact form still submits. `app.js` is a new asset on
+  every page at once — if it 404s or is cached wrong, every page breaks simultaneously, which is
+  a larger blast radius than anything Phase 0 deployed.
 
 ---
 
