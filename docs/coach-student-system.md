@@ -193,14 +193,27 @@ a confusing way — D1 queries either throw `Cannot read properties of undefined
 at all) or `no such table: users` (`--d1` present but pointed at the wrong, unmigrated
 local database).
 
-`devEnv.js` also exports `wranglerCommand()`/`runWrangler()`, which spawn `npx wrangler
-<args>` as a real argv array rather than a `shell:true` joined string — `npx` is a `.cmd`
-shim on Windows (Node can't exec it directly without a shell, confirmed: fails with
-`EINVAL`), so on Windows this routes through `cmd.exe /d /s /c npx wrangler <args>` as its
-own argv array; on POSIX, `npx` is a real executable and needs no shell layer at all.
-Avoiding `shell:true` removes the need for any hand-rolled command-line escaping (Node's
-own per-argument quoting handles it), and lets `test/helpers/server.mjs` spawn with
-`detached: true` on POSIX so its process tree can actually be killed as a group afterward.
+`devEnv.js` also exports `wranglerCommand()`/`runWrangler()`, which spawn wrangler as
+`node <wrangler.js> <args>` directly — `wrangler` is a devDependency of the outer
+`package.json` specifically so this path is resolvable and its version is pinned, instead
+of `npx`'s "resolve whatever's cached or download latest" behavior. **No shell is ever
+invoked, on any platform.** This replaces an earlier version that routed through `npx`
+(`cmd.exe /d /s /c npx wrangler <args>` on Windows, since `npx` is a `.cmd` shim Node can't
+exec directly without a shell) whose comment claimed avoiding `shell:true` "closes off the
+whole class of shell-metacharacter bugs" — **that claim was false and shipped anyway**.
+Verified empirically at a later review checkpoint: `spawnSync('cmd.exe', ['/d','/s','/c',
+...args])` with an argument like `A&echo` still gets re-parsed by cmd.exe's own
+command-tail interpreter and `echo` still runs, because Node's argv-array quoting protects
+against the *target program's* standard argument parsing, not cmd.exe's own second-stage
+reparsing of whatever follows `/c` — and Node only quotes an argument at all if it contains
+whitespace/quotes, so a bare `&` or `|` sailed through unescaped. Invoking `node
+<wrangler.js>` directly sidesteps the problem instead of trying to out-escape it: there is
+no cmd.exe, no `/bin/sh`, anywhere in the process tree on any platform, so no argument
+value gets reinterpreted regardless of what characters it contains — re-verified with the
+same `A&echo`-style argument surviving intact through a real `wrangler d1 execute`
+invocation. This also lets `test/helpers/server.mjs` spawn with `detached: true` on POSIX
+so its process tree can actually be killed as a group afterward, and removes the need for
+any hand-rolled command-line escaping anywhere in this project's dev tooling.
 
 Scripts (all defined in the outer folder's `package.json`, run from there):
 - `npm run dev` — start the full local environment (`scripts/dev-server.js`).
