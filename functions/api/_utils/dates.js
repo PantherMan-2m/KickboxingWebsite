@@ -1,5 +1,11 @@
 // Shared date helpers for Pages Functions dealing with 'YYYY-MM-DD' calendar dates.
 
+// How many days ahead (including today) a student can see/RSVP to weekly
+// classes. Shared by student/upcoming.js (what's offered) and
+// student/rsvp.js (what's accepted) -- if the two disagree, the UI offers
+// RSVPs the API rejects, or the reverse.
+export const RSVP_WINDOW_DAYS = 7;
+
 export function isValidDate(dateStr) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
   const d = new Date(`${dateStr}T00:00:00Z`);

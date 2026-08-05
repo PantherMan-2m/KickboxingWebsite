@@ -1,11 +1,9 @@
 import { jsonResponse } from '../_utils/auth.js';
-import { dayOfWeekFor, todayIso, addDaysIso } from '../_utils/dates.js';
-
-const WINDOW_DAYS = 7;
+import { dayOfWeekFor, todayIso, addDaysIso, RSVP_WINDOW_DAYS } from '../_utils/dates.js';
 
 export async function onRequestGet(context) {
   const start = todayIso();
-  const dates = Array.from({ length: WINDOW_DAYS }, (_, i) => addDaysIso(start, i));
+  const dates = Array.from({ length: RSVP_WINDOW_DAYS }, (_, i) => addDaysIso(start, i));
 
   const { results: templates } = await context.env.DB.prepare(
     `SELECT id, day_of_week AS dayOfWeek, name, start_time AS startTime, end_time AS endTime
