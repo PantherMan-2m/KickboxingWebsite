@@ -55,6 +55,15 @@ endpoint, and one HTML page), so a layer split means two context-isolated agents
 API contract mid-feature while writing to the same repo. The codebase is ~20 files with no build
 step and no layer boundary worth enforcing.
 
+**Opus plans; Sonnet executes. This is a hard split** (adopted 2026-08-05). An Opus session
+authors and amends this document, runs checkpoint reviews, triages `/code-review ultra`
+findings, verifies claims against the code, and writes task specs. It does **not** edit code,
+merge, migrate, deploy, run smoke tests, or walk through dashboard settings — all of that goes
+to a Sonnet session as a self-contained prompt. The Phase 0 checkpoint drifted into doing a git
+restructure and Cloudflare configuration interactively, which was well within Sonnet's range
+and consumed the context reserved for planning Phase 1. If a task turns out to be execution,
+write it up and hand it over rather than doing it.
+
 **Opus checkpoints at phase boundaries, not per task.** Per-task supervision would be redundant
 — exit conditions here are deliberately literal and self-checkable (`npm test` passes, grep
 returns zero, `migrations list` shows zero pending). Sonnet verifies those unaided. Opus is for

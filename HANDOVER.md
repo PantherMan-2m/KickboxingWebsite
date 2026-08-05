@@ -9,18 +9,33 @@ This file is session-to-session continuity notes only.
 For the detailed evidence behind everything Phase 0 changed (exit conditions +
 actual command output per task), see **`reports/phase-0-completion.md`** (outer folder).
 
-## Repo layout (unchanged gotcha)
-- The git repo root is still **`public/`**, not this outer folder.
-- Still outside the repo, untracked: `Server.js`, `package.json`, `package-lock.json`,
-  `node_modules/`, `bootstrap-user.js` (local-only dev tooling — creates a user account by
-  printing a SQL insert with a locally-computed password hash, so passwords never pass
-  through git or an AI assistant), and — new in Phase 0 — `scripts/` (dev-server + seed
-  tooling), `test/` (the automated test suite), `backups/` (production D1 exports,
-  contains real user data), and `reports/` (phase completion reports). Same convention as
-  the pre-existing untracked files: local-only, not needed for deployment.
+## Repo layout — CHANGED 2026-08-05, the old gotcha is gone
+- **The git repo root is now this outer folder**, not `public/`. Moved in `f0c3ec8` on
+  branch `chore/git-root`, because Phase 0's deliverable (`scripts/`, `test/`, `reports/`,
+  `package.json`) lived outside the repo and therefore existed on one disk with no backup,
+  while nine phases depend on it.
+- Now **tracked**: `package.json`, `package-lock.json`, `Server.js`, `bootstrap-user.js`,
+  `scripts/`, `test/`, `reports/`, `PLAN.md`, `HANDOVER.md`, `TODO.md`, and `public/**`.
+- Still **untracked**, by `.gitignore` at the new root: `node_modules/`, `.wrangler/`, and
+  **`backups/`** — production D1 exports containing real user data including pbkdf2 password
+  hashes. This folder used to be safe by construction (outside the repo); it is now inside
+  the repo root and protected only by that ignore rule. **Never let it be staged.**
+- **Cloudflare Pages: Root directory = `public`** in the project's build settings. This is
+  what makes the move work — Pages requires `functions/` at the *project* root and explicitly
+  not inside the static output root, so setting *build output directory* instead would serve
+  the HTML fine while silently dropping every Function and `_middleware.js`. Verified on a
+  preview deployment: login succeeded, so Functions are found under this layout.
 - Remote: `https://github.com/PantherMan-2m/KickboxingWebsite.git`, branch `main`.
-- Phase 0's work is on branch `phase-0-foundation` (see "Branch convention" below), not
-  yet merged to `main` as of this handover.
+- **Rollback is now two actions**, not one: `stable-phase3` (`44edd13`) has the *old* layout,
+  so reverting to it also requires clearing the Cloudflare Root directory setting. The faster
+  path is unchanged — Pages deployment history, promote a previous build, no git involved.
+- **Preview deployments bind to production D1.** Fine for read-only checks like login; never
+  test writes against a preview. Use `npm run dev` (T0.5's local environment) for that.
+
+## Working convention (adopted 2026-08-05)
+Opus sessions are **planning only** — `PLAN.md`, checkpoint review, triaging review findings,
+verifying claims against the code, writing task specs. Sonnet sessions execute everything
+else. See `PLAN.md`'s "Execution model" section.
 
 ## What happened this session (2026-08-05, Phase 0: foundation)
 Built and verified Phase 0 of `PLAN.md` — the infrastructure every later phase depends on,
