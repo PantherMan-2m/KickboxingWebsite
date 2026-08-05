@@ -1,8 +1,10 @@
 # Coach/Student Login & Attendance System
 
 **Status**: Phase 1, Phase 2 (self-signup + approval), and Phase 3 (class RSVPs)
-complete and live (2026-08-04). This is a living document — update it (don't replace it)
-as new features land. See `TODO.md` (outer folder) for what's not built yet.
+complete and live (2026-08-04); Phase 0 (foundation: local dev environment, automated
+tests, migration tracking, backups) and Phase 1 (shared `app.js`, navigation fixes)
+complete and merged to `main` (2026-08-05). This is a living document — update it (don't
+replace it) as new features land. See `TODO.md` (outer folder) for what's not built yet.
 
 This doc has two halves: **Part 1** explains what the system does and how to use it in
 plain English. **Part 2** is the technical reference — schema, endpoints, security
@@ -147,8 +149,10 @@ Cloudflare Pages (static site + Functions) + **D1** (managed SQLite), no build s
 npm dependencies bundled into the deployed site — everything uses what's natively
 available in the Workers runtime (Web Crypto API, `crypto.randomUUID()`).
 
-Git repo root is `public/` (see main `HANDOVER.md` for the full repo-structure history).
-`wrangler.jsonc` at the repo root declares the `DB` binding's `database_name`/`database_id`
+Git repo root is the outer project folder, not `public/` (moved in `f0c3ec8`, Phase 0 —
+see main `HANDOVER.md` for the full repo-structure history). The deployed site is still
+`public/`, and Cloudflare Pages' **Root directory** setting is `public` to compensate.
+`wrangler.jsonc` (at `public/wrangler.jsonc`) declares the `DB` binding's `database_name`/`database_id`
 or migration tracking (`wrangler d1 migrations`/`d1 execute`); the *production* binding is
 set via the Cloudflare Pages dashboard (Settings → Bindings), not read from `wrangler.jsonc`
 for the live Git-integrated deploy. **`wrangler pages dev` does NOT auto-bind D1 from this
@@ -225,8 +229,9 @@ Scripts (all defined in the outer folder's `package.json`, run from there):
 ## Automated tests
 
 `npm test` (outer folder) runs the full suite via Node 24's built-in test runner —
-no new dependencies, nothing to bundle. Test files live in the outer folder's `test/`
-(untracked, same convention as `scripts/`, `Server.js`, `bootstrap-user.js`):
+no new dependencies, nothing to bundle. Test files live in the outer folder's `test/`,
+tracked by git along with `scripts/` (Phase 0's `f0c3ec8` moved the repo root so both
+are now version-controlled; `Server.js` and `bootstrap-user.js` are also tracked):
 
 - `test/unit/` — pure functions imported directly (`dates.js`, `auth.js`'s password
   hashing); no server needed, runs in milliseconds.
@@ -311,7 +316,10 @@ and would reintroduce the same mismatch this reconciliation fixed.
 ## Node/Wrangler requirement
 
 This project requires Node 22+ (current: Node 24.19.0) to run unpinned `wrangler` (4.x).
-All `wrangler d1`/`wrangler pages` commands in this project use plain `npx wrangler`.
+The `wrangler d1`/`wrangler pages` commands documented in "Common maintenance tasks" above
+use plain `npx wrangler`. The local dev tooling (`npm run dev`, `npm run db:reset`, and the
+test suite) deliberately does not — see "Local development environment" above for why it
+spawns `wrangler` directly via `node <wrangler.js>` instead.
 
 ## Database schema
 
@@ -365,14 +373,15 @@ Six tables:
   avoid leaking which case applied (user enumeration protection).
 - **Route protection**: Cloudflare Pages Functions `_middleware.js`, which — confirmed
   against Cloudflare's docs during development — genuinely gates *static* HTML pages,
-  not just API routes. Four middleware files: `functions/coach/_middleware.js` and
+  not just API routes. Five middleware files: `functions/coach/_middleware.js` and
   `functions/student/_middleware.js` gate the static pages (redirect to `/login.html` if
   unauthenticated, redirect to the other role's dashboard if wrong role, redirect to
   `/change-password.html` if `must_change_password`); `functions/api/coach/_middleware.js`
   and `functions/api/student/_middleware.js` do the same for API routes but return JSON
-  401/403 instead of redirecting (since those are `fetch()` calls, not navigations).
-  Each middleware stashes the resolved user on `context.data.user` so downstream handlers
-  don't need a second session lookup.
+  401/403 instead of redirecting (since those are `fetch()` calls, not navigations); and
+  `functions/docs/_middleware.js` (T0.8) gates `/docs/*`, coach-only. Each middleware
+  stashes the resolved user on `context.data.user` so downstream handlers don't need a
+  second session lookup.
 
 ## Shared code
 
@@ -385,6 +394,20 @@ Six tables:
 - `functions/api/_utils/dates.js` — `isValidDate`, `dayOfWeekFor`, `todayIso`,
   `addDaysIso`. Used by both `coach/sessions.js` (matching a date to a weekly template)
   and `student/upcoming.js` (projecting the next 7 days).
+- `public/app.js` (Phase 1, T1.1) — shared frontend behaviour loaded on all 12 pages via
+  `<script defer src="/app.js?v=1"></script>` in `<head>`: the nav/hamburger toggle, the
+  logout handler, `escapeHtml`, the `#year` footer stamp, and a `fetchJson(url, options)`
+  wrapper (`fetch` + `.json()` in one call). Every DOM lookup inside it is guarded — three
+  pages (`login.html`, `change-password.html`, `request-account.html`) have a logo-only
+  header with none of the nav/logout elements. Any page-specific script that calls
+  `fetchJson`/`escapeHtml` on load (not from inside a later event handler) must defer that
+  call to `DOMContentLoaded` — `defer` only guarantees execution before `DOMContentLoaded`,
+  not before a trailing inline `<script>` already in the same document, which runs during
+  parsing. Calling an `app.js` function synchronously at the top of such a script throws a
+  silent, uncaught-in-promise `ReferenceError` with no console output. See any of
+  `coach/attendance.html`, `coach/requests.html`, `coach/session.html`,
+  `coach/students.html`, `coach/templates.html`, `student/dashboard.html`, or
+  `student/upcoming.html` for the pattern.
 
 ## API reference
 
@@ -394,6 +417,7 @@ Six tables:
 | `/api/auth/logout` | POST | public (no-op if none) | revokes session, clears cookie |
 | `/api/auth/change-password` | POST | any logged-in user | `{newPassword}`, clears `must_change_password` |
 | `/api/auth/request-account` | POST | public | `{name,email}` → creates a `pending` user (silently no-ops if the email already exists); always returns the same generic success response |
+| `/api/auth/session` | GET | public | session state for the homepage's Login/My-dashboard swap; always `200 {ok:true, user:{name,role}}` or `{ok:true, user:null}` — never a 401 or redirect, and never more than `name`+`role` |
 | `/api/coach/students` | GET/POST | coach | list roster / create student + email invite |
 | `/api/coach/students/:id` | PATCH | coach | `{status}` activate/deactivate |
 | `/api/coach/requests` | GET | coach | list `pending` users |
@@ -410,9 +434,13 @@ Six tables:
 
 ## Frontend notes
 
-- No build step, no JS modules/bundler — every new page has its own inline `<script>`
-  (can't share `script.js` as-is since it references homepage-only elements like
-  `#contactForm`; loading it on other pages would throw and halt execution).
+- No build step, no JS modules/bundler. Shared behaviour (nav/hamburger, logout,
+  `escapeHtml`, `#year`, `fetchJson`) lives in `public/app.js` (Phase 1, T1.1 — see "Shared
+  code" above), loaded on every page. Each page still has its own trailing inline
+  `<script>` for page-specific logic (a form handler, a data-fetch-and-render loop).
+  `script.js` is homepage-only, kept separate because it also owns the contact-form
+  handler and the header-hide-on-scroll effect, neither of which belongs on the other 11
+  pages.
 - `.form` is a reusable CSS class (generalized from what was originally `#contactForm`-only
   styling) for any label/input/button form layout.
 - `color-scheme: dark` is set globally (site is dark-only) so native controls (date
@@ -424,10 +452,12 @@ Six tables:
   has a 4-hour browser cache; without the version bump, visitors can keep seeing stale
   CSS for hours after a fix ships. This bit us twice during development before the
   versioning was added.
-- Mobile nav on the coach/student pages replicates the homepage's exact hamburger-menu
-  pattern (toggle button, `.nav-links.open` class, closes on link-click or scroll, locks
-  body scroll while open) — each page has its own copy of that JS since there's no
-  shared module system.
+- Mobile nav (toggle button, `.nav-links.open` class, closes on link-click or scroll,
+  locks body scroll while open) is now one implementation in `app.js`, shared by all 12
+  pages including the homepage (Phase 1, T1.1 — previously each page had its own copy).
+  Every authenticated page's nav also has an explicit "Home" link back to `/` (Phase 1,
+  T1.2); the homepage swaps "Login" for "My dashboard" when `/api/auth/session` reports a
+  logged-in visitor.
 - Every new table (roster, weekly schedule, session roster, student history, upcoming
   classes) wraps in `.scroll-x` like the original schedule table, for mobile horizontal
   scrolling.

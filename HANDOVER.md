@@ -1,4 +1,4 @@
-# Handover — Kickboxing Website (as of 2026-08-05, Phase 0 session — MERGED to `main`)
+# Handover — Kickboxing Website (as of 2026-08-05, Phase 0 + Phase 1 — MERGED to `main`)
 
 ## Read this first
 For anything about how the coach/student login + attendance system actually works (both
@@ -122,6 +122,48 @@ per-task exit-condition evidence is in `reports/phase-0-completion.md`; short ve
 production test accounts for this kind of change. Production was only touched for the
 explicitly `[HUMAN GATE]` steps (T0.2's version-check query, T0.3's backup, T0.4's
 migration-table reconciliation), each confirmed before running.
+
+## What happened this session (2026-08-05, Phase 1: shared frontend + navigation) — DONE, merged to `main`
+Built on branch `phase-1-shared-frontend`, T1.1 → T1.2 → T1.3 in order. Full per-task
+evidence, including the required 12-page browser console capture, is in
+`reports/phase-1-completion.md`; short version:
+
+- **T1.1**: extracted nav/hamburger, logout, `escapeHtml`, the `#year` stamp, and a
+  `fetchJson` wrapper into `public/app.js`, loaded via a versioned, deferred `<script>` tag
+  on all 12 pages. Deleted the now-duplicate copy from every page and from
+  `script.js:1-33` (script.js keeps only the contact-form handler and the homepage-only
+  header-hide-on-scroll effect). Net **-253 lines**. Added a grep-shaped regression test
+  (`test/unit/shared-frontend.test.mjs`) asserting all 12 pages reference `/app.js?v=` and
+  have no leftover duplicated code — confirmed to actually fail when `app.js` is removed
+  from a page, not just execute.
+  **Real bug caught by the required browser-driven verification** (not by any console
+  error): 7 of the 12 pages called their data-loading function synchronously at the bottom
+  of their trailing inline `<script>`, which runs *during* document parsing — before
+  `app.js`'s `defer`red execution actually completes, since `defer` only guarantees
+  "before `DOMContentLoaded`," not "before a script already in the document." This threw a
+  silent, uncaught-in-promise `ReferenceError` (no console output at all) and left those
+  pages permanently stuck on "Loading…" on first load. This directly contradicts what this
+  task was originally told about `defer`'s ordering guarantees — see
+  `reports/phase-1-completion.md` for the full discrepancy writeup. Fixed by deferring each
+  affected page's init call to `DOMContentLoaded`, which fires only after every deferred
+  script (`app.js` included) has run.
+- **T1.2**: fixed three navigation dead ends. Every authenticated page's nav now has an
+  explicit "Home" link to `/` (the `.logo` already pointed there but wasn't an obvious nav
+  item). New public `GET /api/auth/session` endpoint (`{ok:true, user:{name,role}}` or
+  `{ok:true, user:null}` — always `200`, never a `401`/redirect) lets the homepage swap
+  "Login" for "My dashboard" once logged in; response fields whitelisted explicitly, not
+  spread, so `id`/`email`/`mustChangePassword` never leak. `coach/session.html` now has a
+  back link to `coach/attendance.html`, upgraded to `?date=<session date>` once the session
+  loads, so the coach lands back on the date they came from; `attendance.html` reads and
+  validates that param (rejecting a malformed or calendar-impossible value like
+  `2026-02-30`, falling back to today).
+- **T1.3**: fixed five pre-existing stale claims in `coach-student-system.md` found during
+  the doc pass (git repo root, `test/` tracked status, `npx wrangler` scope, middleware
+  count, status line), rewrote "Frontend notes" and "Shared code" for `app.js`, added
+  `/api/auth/session` to the API reference. Logged (not fixed) a third notion of "today" —
+  `attendance.html`'s `todayLocalIso()` uses the **browser's** timezone, disagreeing with
+  the server's SAST-fixed `todayIso()` for a coach travelling or on a VPN — to `TODO.md`,
+  deferred to Phase 2's T2.3 which builds directly on "today" for the coach dashboard.
 
 ## What's still open
 - RSVPs only cover the recurring weekly schedule, not one-off/extra sessions (no

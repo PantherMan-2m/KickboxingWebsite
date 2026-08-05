@@ -89,6 +89,24 @@ in `reports/phase-0-completion.md`. Summary:
   a trustworthy safety net. The suite is ~65s. Revisit when that becomes painful, not
   before.
 
+## Phase 1 (shared frontend + navigation) — done and merged to `main`, see `reports/phase-1-completion.md`
+Built on branch `phase-1-shared-frontend`. `public/app.js` now owns nav/hamburger, logout,
+`escapeHtml`, the `#year` stamp, and a `fetchJson` wrapper, shared by all 12 pages (net
+-253 lines); `script.js` keeps only the contact-form handler and the homepage-only
+header-hide-on-scroll effect. Every authenticated page's nav now has an explicit "Home"
+link; the homepage swaps "Login" for "My dashboard" via the new public
+`GET /api/auth/session` endpoint; `coach/session.html` has a back link to
+`coach/attendance.html?date=...` that preserves the selected date. Full evidence,
+including the 12-page browser console capture, in `reports/phase-1-completion.md`.
+
+**Logged, not fixed (found during T1.3's doc pass)**: `coach/attendance.html`'s
+`todayLocalIso()` computes "today" from the **browser's** local timezone — a third notion
+of "today" alongside the server's SAST-fixed `todayIso()` (`_utils/dates.js`, fixed in
+T0.6b) and the plain UTC `new Date()` that would apply anywhere else untouched. The two
+agree for a coach physically in South Africa and disagree for one travelling or on a VPN.
+Not fixed here — Phase 2's next-class panel (T2.3) builds directly on "today" for the
+coach dashboard and is where this should be resolved, per `PLAN.md`'s Phase 1 section.
+
 ## Contact form: Resend wired up and confirmed working (done)
 `RESEND_API_KEY` is set in Cloudflare Pages (Production + Preview), the `cjnacademy.com`
 sending domain is verified, and the form sends to `info@cjnacademy.com` (which
