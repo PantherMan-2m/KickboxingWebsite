@@ -29,7 +29,7 @@ export async function onRequestPost(context) {
     }
 
     const template = await context.env.DB.prepare(
-      'SELECT id, day_of_week FROM class_templates WHERE id = ? AND active = 1'
+      'SELECT id, day_of_week, capacity FROM class_templates WHERE id = ? AND active = 1'
     )
       .bind(templateId)
       .first();
@@ -40,12 +40,50 @@ export async function onRequestPost(context) {
       return jsonResponse({ ok: false, error: 'Date does not match this class\'s weekday' }, { status: 400 });
     }
 
-    await context.env.DB.prepare(
-      `INSERT INTO session_rsvps (template_id, session_date, user_id) VALUES (?, ?, ?)
-       ON CONFLICT(template_id, session_date, user_id) DO NOTHING`
+    // A student who already has a row is never rejected by capacity -- a full class
+    // must not break the idempotent re-RSVP the ON CONFLICT ... DO NOTHING below relies on.
+    const existing = await context.env.DB.prepare(
+      'SELECT 1 FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?'
     )
       .bind(templateId, date, context.data.user.id)
-      .run();
+      .first();
+    if (existing) {
+      return jsonResponse({ ok: true });
+    }
+
+    // Effective capacity: COALESCE(class_sessions.capacity, class_templates.capacity)
+    // for this template+date. The class_sessions row may not exist yet -- coaches
+    // create sessions on the day, after students have already been RSVPing.
+    const session = await context.env.DB.prepare(
+      'SELECT capacity FROM class_sessions WHERE template_id = ? AND session_date = ?'
+    )
+      .bind(templateId, date)
+      .first();
+    const effectiveCapacity = session && session.capacity !== null ? session.capacity : template.capacity;
+
+    if (effectiveCapacity === null) {
+      await context.env.DB.prepare(
+        `INSERT INTO session_rsvps (template_id, session_date, user_id) VALUES (?, ?, ?)
+         ON CONFLICT(template_id, session_date, user_id) DO NOTHING`
+      )
+        .bind(templateId, date, context.data.user.id)
+        .run();
+    } else {
+      // Atomic: the capacity check and the insert happen in one statement, so two
+      // requests racing for the last spot cannot both succeed. A read-count-then-insert
+      // would have a window between the two where both could pass the check.
+      const result = await context.env.DB.prepare(
+        `INSERT INTO session_rsvps (template_id, session_date, user_id)
+         SELECT ?, ?, ?
+         WHERE (SELECT COUNT(*) FROM session_rsvps WHERE template_id = ? AND session_date = ?) < ?`
+      )
+        .bind(templateId, date, context.data.user.id, templateId, date, effectiveCapacity)
+        .run();
+
+      if (result.meta.changes === 0) {
+        return jsonResponse({ ok: false, error: 'This class is full' }, { status: 409 });
+      }
+    }
   } else {
     await context.env.DB.prepare(
       `DELETE FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?`
