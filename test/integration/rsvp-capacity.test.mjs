@@ -175,3 +175,57 @@ test('concurrent requests for one remaining spot produce exactly one winning row
   assert.equal(entry.full, true);
   assert.equal(entry.going, false, 'the observer never RSVP\'d, so going must be false');
 });
+
+// Fix: rsvp.js's capacity-limited INSERT...SELECT now carries an
+// ON CONFLICT (template_id, session_date, user_id) DO NOTHING clause, since a
+// double-submitted RSVP (two near-simultaneous requests from the same user, racing the
+// earlier "existing row" check) would otherwise hit the row's own PK constraint and throw
+// an uncaught error instead of a graceful response. Both new tests use their own
+// dedicated template (Tuesday/Thursday) rather than the seeded Mon/Wed/Fri ones, per this
+// file's own convention -- all three are already claimed by the tests above.
+
+test('a double-submitted RSVP on a capacity-limited class returns ok twice and writes exactly one row', async () => {
+  const date = dateForDowInWindow(2); // Tuesday -- unclaimed by any other test in this file
+  const createRes = await fetch(BASE_URL + '/api/coach/templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: coachCookie },
+    body: JSON.stringify({ dayOfWeek: 2, startTime: '19:00', name: 'Double-submit test class', capacity: 5 }),
+  });
+  assert.equal(createRes.status, 200);
+  const { template } = await createRes.json();
+
+  const { cookie } = await login('active1@seed.test', 'StudentPass123!');
+  const [r1, r2] = await Promise.all([
+    rsvp(cookie, template.id, date, true),
+    rsvp(cookie, template.id, date, true),
+  ]);
+  assert.equal(r1.status, 200, 'first submission should succeed');
+  assert.equal(r2.status, 200, 'the duplicate submission should also return ok, not an error');
+  assert.equal((await r1.json()).ok, true);
+  assert.equal((await r2.json()).ok, true);
+  assert.equal(countRsvpRows(template.id, date), 1, 'a double-submit must write exactly one row, not two');
+});
+
+test('a genuinely full class still returns 409 after the ON CONFLICT DO NOTHING fix', async () => {
+  const date = dateForDowInWindow(4); // Thursday -- unclaimed by any other test in this file
+  const createRes = await fetch(BASE_URL + '/api/coach/templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: coachCookie },
+    body: JSON.stringify({ dayOfWeek: 4, startTime: '19:00', name: 'Still-full test class', capacity: 1 }),
+  });
+  assert.equal(createRes.status, 200);
+  const { template } = await createRes.json();
+
+  const { cookie: c1 } = await login('active1@seed.test', 'StudentPass123!');
+  const { cookie: c2 } = await login('active2@seed.test', 'StudentPass123!');
+
+  const r1 = await rsvp(c1, template.id, date, true);
+  assert.equal(r1.status, 200);
+
+  const r2 = await rsvp(c2, template.id, date, true);
+  assert.equal(r2.status, 409, 'a different student hitting a full class must still get 409, not a false ok');
+  const r2body = await r2.json();
+  assert.equal(r2body.ok, false);
+  assert.equal(r2body.error, 'This class is full');
+  assert.equal(countRsvpRows(template.id, date), 1, 'the rejected RSVP must not write a row');
+});

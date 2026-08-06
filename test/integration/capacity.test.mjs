@@ -124,7 +124,9 @@ test('capacity validation rejects non-numeric, negative, zero, and non-integer v
 });
 
 test('capacity validation rejects non-numeric, negative, zero, and non-integer values on template PATCH', async () => {
-  const cases = ['abc', -5, 0, 12.5];
+  // true/[1]/{} all coerce to 1 via Number(), which used to sail through as a valid
+  // capacity of 1 -- the fix rejects them by type before any coercion happens.
+  const cases = ['abc', -5, 0, 12.5, true, [1], {}];
   for (const capacity of cases) {
     const res = await authedFetch('/api/coach/templates/seed-template-fri', {
       method: 'PATCH',
@@ -132,6 +134,20 @@ test('capacity validation rejects non-numeric, negative, zero, and non-integer v
     });
     assert.equal(res.status, 400, `expected 400 for capacity=${JSON.stringify(capacity)}, got ${res.status}`);
     assert.equal((await res.json()).ok, false);
+  }
+
+  // null and '' are both accepted (unlike the rejected cases above) and must behave
+  // identically: both clear the capacity to NULL (unlimited).
+  for (const capacity of [null, '']) {
+    const res = await authedFetch('/api/coach/templates/seed-template-fri', {
+      method: 'PATCH',
+      body: JSON.stringify({ capacity }),
+    });
+    assert.equal(res.status, 200, `expected capacity=${JSON.stringify(capacity)} to be accepted as unlimited`);
+    assert.equal((await res.json()).ok, true);
+    const row = await (await authedFetch('/api/coach/templates')).json();
+    const fri = row.templates.find((t) => t.id === 'seed-template-fri');
+    assert.equal(fri.capacity, null, `capacity=${JSON.stringify(capacity)} should clear to NULL (unlimited)`);
   }
 });
 

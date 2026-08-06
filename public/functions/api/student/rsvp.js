@@ -72,16 +72,31 @@ export async function onRequestPost(context) {
       // Atomic: the capacity check and the insert happen in one statement, so two
       // requests racing for the last spot cannot both succeed. A read-count-then-insert
       // would have a window between the two where both could pass the check.
+      // ON CONFLICT DO NOTHING covers a double-submitted RSVP racing the "existing" check
+      // above (two near-simultaneous requests from the same user, neither of which sees
+      // the other's row yet) -- without it, the second insert would throw an uncaught
+      // UNIQUE constraint error instead of a graceful response.
       const result = await context.env.DB.prepare(
         `INSERT INTO session_rsvps (template_id, session_date, user_id)
          SELECT ?, ?, ?
-         WHERE (SELECT COUNT(*) FROM session_rsvps WHERE template_id = ? AND session_date = ?) < ?`
+         WHERE (SELECT COUNT(*) FROM session_rsvps WHERE template_id = ? AND session_date = ?) < ?
+         ON CONFLICT (template_id, session_date, user_id) DO NOTHING`
       )
         .bind(templateId, date, context.data.user.id, templateId, date, effectiveCapacity)
         .run();
 
       if (result.meta.changes === 0) {
-        return jsonResponse({ ok: false, error: 'This class is full' }, { status: 409 });
+        // Ambiguous on its own: either the class was full (the WHERE blocked the SELECT),
+        // or this exact row already existed (ON CONFLICT silently no-op'd). Re-query for
+        // this user's own row to tell the two apart.
+        const stillExists = await context.env.DB.prepare(
+          'SELECT 1 FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?'
+        )
+          .bind(templateId, date, context.data.user.id)
+          .first();
+        if (!stillExists) {
+          return jsonResponse({ ok: false, error: 'This class is full' }, { status: 409 });
+        }
       }
     }
   } else {
