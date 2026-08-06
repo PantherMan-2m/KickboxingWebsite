@@ -15,18 +15,17 @@ never as standing reading; see `PLAN.md`'s "Keeping sessions cheap").
 
 ## Current state
 
-- **`main`** is at Phase 0 (`9582248`) — foundation: Node 24/Wrangler 4, migration
-  tracking, backups, local dev environment (`npm run dev`, `npm run db:reset`), automated
-  test suite (`npm test`), `/docs/*` gated behind a coach session.
-- **`phase-1-shared-frontend`** is built and reviewed, **not yet merged** — shared
-  `public/app.js` (nav/hamburger/logout/`escapeHtml`/`#year`/`fetchJson`, loaded on all 12
-  pages), the three navigation dead-ends fixed (`/api/auth/session`, "Home" links,
-  `coach/session.html`'s back link), and a post-review fix pass. Full evidence in
-  `reports/phase-1-completion.md`. Merge command, once confirmed:
-  ```bash
-  git checkout main && git merge phase-1-shared-frontend && git push origin main
-  ```
-- Phase 2 is next after that merge — see `plan/phase-2.md`.
+- **`main`** is at Phase 0 + Phase 1 (`2dd4d2d`, pushed to `origin/main`).
+  Phase 0: Node 24/Wrangler 4, migration tracking, backups, local dev environment
+  (`npm run dev`, `npm run db:reset`), automated test suite (`npm test`), `/docs/*` gated
+  behind a coach session. Phase 1: shared `public/app.js`
+  (nav/hamburger/logout/`escapeHtml`/`#year`/`fetchJson`, loaded on all 12 pages), the three
+  navigation dead-ends fixed (`/api/auth/session`, "Home" links, `coach/session.html`'s back
+  link), and a post-review fix pass. **Merged and live-verified.**
+- **Phase 2 is next** and is fully specified — see `plan/phase-2.md`, amended at the
+  Phase 1 → 2 checkpoint (2026-08-06). It carries the first production migration since
+  Phase 0, so T0.3's backup gate applies before any `--remote` apply. Branch:
+  `phase-2-capacity`.
 
 ## Repo layout
 

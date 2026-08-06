@@ -89,9 +89,9 @@ in `reports/phase-0-completion.md`. Summary:
   a trustworthy safety net. The suite is ~65s. Revisit when that becomes painful, not
   before.
 
-## Phase 1 (shared frontend + navigation) — built, NOT yet merged, see `reports/phase-1-completion.md`
-Built on branch `phase-1-shared-frontend`, currently 4 commits ahead of `main` (unmerged) —
-`main` is still at `2b10dad`. `public/app.js` now owns nav/hamburger, logout,
+## Phase 1 (shared frontend + navigation) — done and merged to `main`, see `reports/phase-1-completion.md`
+Built on branch `phase-1-shared-frontend`, merged to `main` (`2dd4d2d`) and live-verified.
+`public/app.js` now owns nav/hamburger, logout,
 `escapeHtml`, the `#year` stamp, and a `fetchJson` wrapper, shared by all 12 pages (net
 -253 lines); `script.js` keeps only the contact-form handler and the homepage-only
 header-hide-on-scroll effect. Every authenticated page's nav now has an explicit "Home"
