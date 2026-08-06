@@ -1,4 +1,5 @@
 import { jsonResponse } from '../_utils/auth.js';
+import { parseJsonBody } from '../_utils/body.js';
 import { isValidDate, dayOfWeekFor } from '../_utils/dates.js';
 
 export async function onRequestGet(context) {
@@ -37,12 +38,11 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPost(context) {
-  let body;
-  try {
-    body = await context.request.json();
-  } catch {
+  const parsed = await parseJsonBody(context);
+  if (!parsed.ok) {
     return jsonResponse({ ok: false, error: 'Malformed request' }, { status: 400 });
   }
+  const body = parsed.body;
 
   const date = body.date;
   if (!date || !isValidDate(date)) {

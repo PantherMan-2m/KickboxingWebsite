@@ -1,21 +1,13 @@
 import { jsonResponse } from '../_utils/auth.js';
+import { parseJsonBody } from '../_utils/body.js';
 import { isValidDate, todayIso, addDaysIso, dayOfWeekFor, RSVP_WINDOW_DAYS } from '../_utils/dates.js';
 
 export async function onRequestPost(context) {
-  let body;
-  try {
-    body = await context.request.json();
-  } catch {
+  const parsed = await parseJsonBody(context);
+  if (!parsed.ok) {
     return jsonResponse({ ok: false, error: 'Malformed request' }, { status: 400 });
   }
-  // `null` and other non-object JSON values (e.g. a bare string or number) parse
-  // successfully -- they aren't a .json() error -- so they'd otherwise reach an
-  // unguarded destructure below and throw uncaught.
-  if (!body || typeof body !== 'object') {
-    return jsonResponse({ ok: false, error: 'Malformed request' }, { status: 400 });
-  }
-
-  const { templateId, date, going } = body;
+  const { templateId, date, going } = parsed.body;
   if (!templateId || !date || !isValidDate(date) || typeof going !== 'boolean') {
     return jsonResponse(
       { ok: false, error: 'templateId, a valid date, and going (boolean) are required' },
