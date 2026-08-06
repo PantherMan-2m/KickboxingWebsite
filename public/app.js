@@ -10,6 +10,21 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// The gym is in Somerset West (Africa/Johannesburg, UTC+2 fixed, no DST), but a visiting
+// coach's browser could be set to any timezone. Mirrors _utils/dates.js's todayIso() --
+// same fixed +2 offset -- so "today" agrees between server and client. Duplicated rather
+// than shared, since this is a plain browser <script> with no bundler and that server
+// helper is an ES module; see PLAN.md's "Conventions inherited from the existing
+// codebase" (no build step) and the Phase 1 review's rejected finding #4 for the same
+// tradeoff already accepted for dateFromQuery()/isValidDate(). Having the server hand the
+// client "today" was considered and rejected too (T2.4, amended) -- it would put a
+// network round-trip in front of populating a date input and make the page fail worse
+// offline.
+function sastTodayIso() {
+  const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
+  return new Date(Date.now() + SAST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
 // On a network failure or a non-JSON response body (a Cloudflare edge error
 // page, an offline visitor), returns a synthetic {ok:false, error} data shape
 // instead of throwing -- callers already branch on `data.ok`/`data.error` for

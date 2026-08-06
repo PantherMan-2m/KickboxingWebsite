@@ -53,3 +53,26 @@ for (const page of PAGES) {
     );
   });
 }
+
+// T2.4: coach/attendance.html's own todayLocalIso() computed "today" from the browser's
+// local timezone -- a third, disagreeing notion of "today" alongside the server's
+// SAST-fixed todayIso() (_utils/dates.js). Replaced with app.js's sastTodayIso(), which
+// duplicates _utils/dates.js's fixed +2 offset rather than importing it (no build step,
+// so a plain browser <script> can't import a server ES module -- same tradeoff already
+// accepted for dateFromQuery()/isValidDate() in Phase 1). Both copies must carry the same
+// offset and todayLocalIso must be fully gone, not just unused.
+test('app.js and _utils/dates.js carry the same fixed SAST offset, and todayLocalIso is gone', () => {
+  const appJs = fs.readFileSync(path.join(PUBLIC_DIR, 'app.js'), 'utf8');
+  const datesJs = fs.readFileSync(
+    path.join(PUBLIC_DIR, 'functions', 'api', '_utils', 'dates.js'),
+    'utf8'
+  );
+  assert.match(appJs, /function sastTodayIso/, 'expected app.js to define sastTodayIso');
+  const offsetPattern = /2 \* 60 \* 60 \* 1000/;
+  assert.match(appJs, offsetPattern, 'expected app.js to carry the same fixed SAST offset');
+  assert.match(datesJs, offsetPattern, 'expected _utils/dates.js to carry the same fixed SAST offset');
+
+  const attendanceHtml = fs.readFileSync(path.join(PUBLIC_DIR, 'coach', 'attendance.html'), 'utf8');
+  assert.doesNotMatch(attendanceHtml, /todayLocalIso/, 'expected todayLocalIso to be fully removed, not just unused');
+  assert.match(attendanceHtml, /sastTodayIso\(\)/, 'expected coach/attendance.html to call the shared sastTodayIso()');
+});

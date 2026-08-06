@@ -33,6 +33,13 @@
     <p><a href="/coach/attendance.html" id="backLink">&larr; Back to Attendance</a></p>
     <h2 id="sessionTitle">Loading…</h2>
     <p class="muted" id="sessionMeta"></p>
+    <p class="muted" id="capacityMeta"></p>
+    <form id="capacityForm" class="form" style="max-width:280px;display:none">
+      <label for="capacityInput">Capacity override for this session (optional)</label>
+      <input id="capacityInput" type="number" min="1" step="1" placeholder="Unlimited" />
+      <button class="btn btn-outline btn-sm" type="submit">Save</button>
+      <span class="form-status" id="capacityStatus" role="status"></span>
+    </form>
   </section>
 
   <section class="container section">
@@ -50,11 +57,22 @@
   </div>
 </footer>
 
-<script src="/app.js?v=1"></script>
+<script src="/app.js?v=2"></script>
 <script>
   const sessionId = new URLSearchParams(window.location.search).get('id');
   const rosterContainer = document.getElementById('rosterContainer');
   const statuses = ['present', 'absent', 'excused'];
+
+  // Refreshes only the capacity display (used after saving the capacity override) --
+  // deliberately does not touch rosterContainer, since re-rendering the roster would
+  // discard any attendance selections the coach has made but not yet saved.
+  async function refreshCapacityMeta() {
+    const { data } = await fetchJson(`/api/coach/sessions/${sessionId}`);
+    if (!data.ok) return;
+    document.getElementById('capacityMeta').textContent =
+      data.session.effectiveCapacity === null ? 'Capacity: unlimited' : `Capacity: ${data.session.effectiveCapacity}`;
+    document.getElementById('capacityInput').value = data.session.capacity ?? '';
+  }
 
   async function load() {
     if (!sessionId) {
@@ -72,32 +90,74 @@
       `${data.session.date}${data.session.startTime ? ' · ' + data.session.startTime : ''}`;
     document.getElementById('backLink').href = `/coach/attendance.html?date=${data.session.date}`;
 
+    document.getElementById('capacityMeta').textContent =
+      data.session.effectiveCapacity === null ? 'Capacity: unlimited' : `Capacity: ${data.session.effectiveCapacity}`;
+    document.getElementById('capacityInput').value = data.session.capacity ?? '';
+    document.getElementById('capacityForm').style.display = '';
+
     if (data.roster.length === 0) {
       rosterContainer.innerHTML = '<p class="muted">No active students on the roster yet.</p>';
       return;
     }
+
+    // Pre-fill present from the RSVP list only for a session that's never been saved and
+    // was created from a template (one-off sessions have no RSVPs to pre-fill from).
+    // Reopening a saved session must show exactly what was last saved -- saved state
+    // always beats the RSVP pre-fill, never the other way around.
+    const usePrefill = !data.session.attendanceSaved && !!data.session.templateId;
 
     rosterContainer.innerHTML = `
       <div class="scroll-x">
       <table class="schedule">
         <thead><tr><th>Name</th><th>RSVP</th><th>Present</th><th>Absent</th><th>Excused</th></tr></thead>
         <tbody>
-          ${data.roster.map((s) => `
+          ${data.roster.map((s) => {
+            const effectiveStatus = usePrefill ? (s.going ? 'present' : 'absent') : s.status;
+            return `
             <tr data-user-id="${s.id}">
               <td>${escapeHtml(s.name)}</td>
               <td>${s.going ? '✓ Going' : ''}</td>
               ${statuses.map((st) => `
                 <td style="text-align:center">
-                  <input type="radio" name="status-${s.id}" value="${st}" ${s.status === st ? 'checked' : ''} />
+                  <input type="radio" name="status-${s.id}" value="${st}" ${effectiveStatus === st ? 'checked' : ''} />
                 </td>
               `).join('')}
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
         </tbody>
       </table>
       </div>
     `;
   }
+
+  document.getElementById('capacityForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const capacityStatus = document.getElementById('capacityStatus');
+    const submitButton = e.target.querySelector('button[type="submit"]');
+    const input = document.getElementById('capacityInput');
+
+    capacityStatus.textContent = 'Saving…';
+    submitButton.disabled = true;
+
+    try {
+      const { response, data } = await fetchJson(`/api/coach/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capacity: input.value }),
+      });
+
+      if (!response?.ok || !data.ok) {
+        capacityStatus.textContent = data.error || 'Could not save.';
+        return;
+      }
+
+      capacityStatus.textContent = 'Saved.';
+      await refreshCapacityMeta();
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
 
   document.getElementById('saveButton').addEventListener('click', async () => {
     const status = document.getElementById('formStatus');

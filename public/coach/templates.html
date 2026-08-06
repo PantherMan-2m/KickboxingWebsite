@@ -52,6 +52,9 @@
       <label for="name">Class name</label>
       <input id="name" type="text" name="name" required placeholder="All Levels" />
 
+      <label for="capacity">Capacity (optional)</label>
+      <input id="capacity" type="number" name="capacity" min="1" step="1" placeholder="Unlimited" />
+
       <button class="btn" type="submit">Add to schedule</button>
       <p class="form-status" id="formStatus" role="status"></p>
     </form>
@@ -59,13 +62,14 @@
 
   <section class="container section">
     <h2>Current weekly schedule</h2>
+    <p class="form-status" id="scheduleStatus" role="status"></p>
     <div class="scroll-x">
       <table class="schedule" id="templatesTable">
         <thead>
-          <tr><th>Day</th><th>Time</th><th>Class</th></tr>
+          <tr><th>Day</th><th>Time</th><th>Class</th><th>Capacity</th><th></th></tr>
         </thead>
         <tbody id="templatesBody">
-          <tr><td colspan="3">Loading…</td></tr>
+          <tr><td colspan="5">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -78,28 +82,55 @@
   </div>
 </footer>
 
-<script src="/app.js?v=1"></script>
+<script src="/app.js?v=2"></script>
 <script>
   const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const templatesBody = document.getElementById('templatesBody');
+  const scheduleStatus = document.getElementById('scheduleStatus');
 
   async function loadTemplates() {
     const { data } = await fetchJson('/api/coach/templates');
     if (!data.ok) {
-      templatesBody.innerHTML = `<tr><td colspan="3">${escapeHtml(data.error || 'Could not load schedule.')}</td></tr>`;
+      templatesBody.innerHTML = `<tr><td colspan="5">${escapeHtml(data.error || 'Could not load schedule.')}</td></tr>`;
       return;
     }
     if (data.templates.length === 0) {
-      templatesBody.innerHTML = '<tr><td colspan="3">No recurring classes set up yet.</td></tr>';
+      templatesBody.innerHTML = '<tr><td colspan="5">No recurring classes set up yet.</td></tr>';
       return;
     }
     templatesBody.innerHTML = data.templates.map((t) => `
-      <tr>
+      <tr data-id="${t.id}">
         <td>${DAY_NAMES[t.day_of_week]}</td>
         <td>${t.start_time}${t.end_time ? ' - ' + t.end_time : ''}</td>
         <td>${escapeHtml(t.name)}</td>
+        <td><input type="number" class="capacity-input" min="1" step="1" placeholder="Unlimited" value="${t.capacity ?? ''}" style="width:6em" /></td>
+        <td><button class="btn btn-outline btn-sm capacity-save">Save</button></td>
       </tr>
     `).join('');
+
+    templatesBody.querySelectorAll('tr[data-id]').forEach((row) => {
+      row.querySelector('.capacity-save').addEventListener('click', async () => {
+        const btn = row.querySelector('.capacity-save');
+        const input = row.querySelector('.capacity-input');
+        btn.disabled = true;
+        scheduleStatus.textContent = 'Saving…';
+        try {
+          const { response, data } = await fetchJson(`/api/coach/templates/${row.dataset.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ capacity: input.value }),
+          });
+          if (!response?.ok || !data.ok) {
+            scheduleStatus.textContent = data.error || 'Could not save capacity.';
+            return;
+          }
+          scheduleStatus.textContent = 'Saved.';
+          await loadTemplates();
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
   }
 
   document.getElementById('addTemplateForm').addEventListener('submit', async (e) => {
@@ -120,6 +151,7 @@
           startTime: form.startTime.value,
           endTime: form.endTime.value || undefined,
           name: form.name.value,
+          capacity: form.capacity.value,
         }),
       });
 

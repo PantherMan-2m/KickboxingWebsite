@@ -1,4 +1,5 @@
 import { jsonResponse } from '../_utils/auth.js';
+import { parseJsonBody } from '../_utils/body.js';
 import { isValidDate, dayOfWeekFor } from '../_utils/dates.js';
 
 export async function onRequestGet(context) {
@@ -12,7 +13,7 @@ export async function onRequestGet(context) {
 
   const { results: templatesForDay } = await context.env.DB.prepare(
     `SELECT t.id AS templateId, t.name, t.start_time AS startTime, t.end_time AS endTime,
-            cs.id AS sessionId
+            t.capacity, cs.id AS sessionId
      FROM class_templates t
      LEFT JOIN class_sessions cs ON cs.template_id = t.id AND cs.session_date = ?
      WHERE t.day_of_week = ? AND t.active = 1
@@ -22,7 +23,8 @@ export async function onRequestGet(context) {
     .all();
 
   const { results: sessions } = await context.env.DB.prepare(
-    `SELECT id, session_date AS date, name, start_time AS startTime, end_time AS endTime, template_id AS templateId
+    `SELECT id, session_date AS date, name, start_time AS startTime, end_time AS endTime,
+            template_id AS templateId, capacity
      FROM class_sessions WHERE session_date = ? ORDER BY start_time`
   )
     .bind(date)
@@ -37,12 +39,11 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPost(context) {
-  let body;
-  try {
-    body = await context.request.json();
-  } catch {
+  const parsed = await parseJsonBody(context);
+  if (!parsed.ok) {
     return jsonResponse({ ok: false, error: 'Malformed request' }, { status: 400 });
   }
+  const body = parsed.body;
 
   const date = body.date;
   if (!date || !isValidDate(date)) {

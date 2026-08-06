@@ -1,21 +1,13 @@
 import { jsonResponse } from '../_utils/auth.js';
+import { parseJsonBody } from '../_utils/body.js';
 import { isValidDate, todayIso, addDaysIso, dayOfWeekFor, RSVP_WINDOW_DAYS } from '../_utils/dates.js';
 
 export async function onRequestPost(context) {
-  let body;
-  try {
-    body = await context.request.json();
-  } catch {
+  const parsed = await parseJsonBody(context);
+  if (!parsed.ok) {
     return jsonResponse({ ok: false, error: 'Malformed request' }, { status: 400 });
   }
-  // `null` and other non-object JSON values (e.g. a bare string or number) parse
-  // successfully -- they aren't a .json() error -- so they'd otherwise reach an
-  // unguarded destructure below and throw uncaught.
-  if (!body || typeof body !== 'object') {
-    return jsonResponse({ ok: false, error: 'Malformed request' }, { status: 400 });
-  }
-
-  const { templateId, date, going } = body;
+  const { templateId, date, going } = parsed.body;
   if (!templateId || !date || !isValidDate(date) || typeof going !== 'boolean') {
     return jsonResponse(
       { ok: false, error: 'templateId, a valid date, and going (boolean) are required' },
@@ -37,7 +29,7 @@ export async function onRequestPost(context) {
     }
 
     const template = await context.env.DB.prepare(
-      'SELECT id, day_of_week FROM class_templates WHERE id = ? AND active = 1'
+      'SELECT id, day_of_week, capacity FROM class_templates WHERE id = ? AND active = 1'
     )
       .bind(templateId)
       .first();
@@ -48,12 +40,65 @@ export async function onRequestPost(context) {
       return jsonResponse({ ok: false, error: 'Date does not match this class\'s weekday' }, { status: 400 });
     }
 
-    await context.env.DB.prepare(
-      `INSERT INTO session_rsvps (template_id, session_date, user_id) VALUES (?, ?, ?)
-       ON CONFLICT(template_id, session_date, user_id) DO NOTHING`
+    // A student who already has a row is never rejected by capacity -- a full class
+    // must not break the idempotent re-RSVP the ON CONFLICT ... DO NOTHING below relies on.
+    const existing = await context.env.DB.prepare(
+      'SELECT 1 FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?'
     )
       .bind(templateId, date, context.data.user.id)
-      .run();
+      .first();
+    if (existing) {
+      return jsonResponse({ ok: true });
+    }
+
+    // Effective capacity: COALESCE(class_sessions.capacity, class_templates.capacity)
+    // for this template+date. The class_sessions row may not exist yet -- coaches
+    // create sessions on the day, after students have already been RSVPing.
+    const session = await context.env.DB.prepare(
+      'SELECT capacity FROM class_sessions WHERE template_id = ? AND session_date = ?'
+    )
+      .bind(templateId, date)
+      .first();
+    const effectiveCapacity = session && session.capacity !== null ? session.capacity : template.capacity;
+
+    if (effectiveCapacity === null) {
+      await context.env.DB.prepare(
+        `INSERT INTO session_rsvps (template_id, session_date, user_id) VALUES (?, ?, ?)
+         ON CONFLICT(template_id, session_date, user_id) DO NOTHING`
+      )
+        .bind(templateId, date, context.data.user.id)
+        .run();
+    } else {
+      // Atomic: the capacity check and the insert happen in one statement, so two
+      // requests racing for the last spot cannot both succeed. A read-count-then-insert
+      // would have a window between the two where both could pass the check.
+      // ON CONFLICT DO NOTHING covers a double-submitted RSVP racing the "existing" check
+      // above (two near-simultaneous requests from the same user, neither of which sees
+      // the other's row yet) -- without it, the second insert would throw an uncaught
+      // UNIQUE constraint error instead of a graceful response.
+      const result = await context.env.DB.prepare(
+        `INSERT INTO session_rsvps (template_id, session_date, user_id)
+         SELECT ?, ?, ?
+         WHERE (SELECT COUNT(*) FROM session_rsvps WHERE template_id = ? AND session_date = ?) < ?
+         ON CONFLICT (template_id, session_date, user_id) DO NOTHING`
+      )
+        .bind(templateId, date, context.data.user.id, templateId, date, effectiveCapacity)
+        .run();
+
+      if (result.meta.changes === 0) {
+        // Ambiguous on its own: either the class was full (the WHERE blocked the SELECT),
+        // or this exact row already existed (ON CONFLICT silently no-op'd). Re-query for
+        // this user's own row to tell the two apart.
+        const stillExists = await context.env.DB.prepare(
+          'SELECT 1 FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?'
+        )
+          .bind(templateId, date, context.data.user.id)
+          .first();
+        if (!stillExists) {
+          return jsonResponse({ ok: false, error: 'This class is full' }, { status: 409 });
+        }
+      }
+    }
   } else {
     await context.env.DB.prepare(
       `DELETE FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?`

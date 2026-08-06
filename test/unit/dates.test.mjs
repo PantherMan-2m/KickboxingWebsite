@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isValidDate, dayOfWeekFor, todayIso, addDaysIso } from '../../public/functions/api/_utils/dates.js';
+import { isValidDate, dayOfWeekFor, todayIso, addDaysIso, sastNowParts } from '../../public/functions/api/_utils/dates.js';
 
 test('isValidDate accepts well-formed calendar dates', () => {
   assert.equal(isValidDate('2026-08-05'), true);
@@ -42,4 +42,21 @@ test('todayIso() returns the SAST calendar date, not UTC (regression: T0.6b #1)'
 test('todayIso() with no argument uses the real current time', () => {
   const result = todayIso();
   assert.match(result, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('sastNowParts() returns both date and time from the same shifted instant, matching todayIso()', () => {
+  // 2026-08-04T23:30:00Z is 2026-08-05 01:30 SAST -- date rolls over just after
+  // UTC midnight the same way todayIso() already regression-tests (T0.6b #1);
+  // this pins that .date agrees with todayIso() and .time reflects the same shift.
+  const justAfterMidnightSAST = new Date('2026-08-04T23:30:00Z');
+  const parts = sastNowParts(justAfterMidnightSAST);
+  assert.equal(parts.date, '2026-08-05');
+  assert.equal(parts.time, '01:30');
+  assert.equal(parts.date, todayIso(justAfterMidnightSAST));
+});
+
+test('sastNowParts() with no argument uses the real current time', () => {
+  const parts = sastNowParts();
+  assert.match(parts.date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(parts.time, /^\d{2}:\d{2}$/);
 });

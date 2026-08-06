@@ -29,13 +29,14 @@
   <section class="container section">
     <h2>Upcoming classes</h2>
     <p class="muted">The next 7 days. RSVP so your coach knows who's coming.</p>
+    <p class="form-status" id="upcomingStatus" role="status"></p>
     <div class="scroll-x">
       <table class="schedule" id="upcomingTable">
         <thead>
-          <tr><th>Date</th><th>Class</th><th>Time</th><th></th></tr>
+          <tr><th>Date</th><th>Class</th><th>Time</th><th>Spots</th><th></th></tr>
         </thead>
         <tbody id="upcomingBody">
-          <tr><td colspan="4">Loading…</td></tr>
+          <tr><td colspan="5">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -48,31 +49,40 @@
   </div>
 </footer>
 
-<script src="/app.js?v=1"></script>
+<script src="/app.js?v=2"></script>
 <script>
   const upcomingBody = document.getElementById('upcomingBody');
+  const upcomingStatus = document.getElementById('upcomingStatus');
 
   function renderUpcoming(list) {
     if (list.length === 0) {
-      upcomingBody.innerHTML = '<tr><td colspan="4">No classes scheduled in the next 7 days.</td></tr>';
+      upcomingBody.innerHTML = '<tr><td colspan="5">No classes scheduled in the next 7 days.</td></tr>';
       return;
     }
-    upcomingBody.innerHTML = list.map((c) => `
+    upcomingBody.innerHTML = list.map((c) => {
+      const spotsText = c.capacity === null ? 'Unlimited' : `${Math.max(0, c.capacity - c.attending)} left`;
+      // An already-going student always keeps a working cancel, even if the class
+      // filled up after they RSVP'd -- only a non-going student is blocked.
+      const blocked = c.full && !c.going;
+      const label = c.going ? "Going ✓ (tap to cancel)" : (blocked ? 'Full' : "I'm going");
+      return `
       <tr>
         <td>${c.date}</td>
         <td>${escapeHtml(c.name)}</td>
         <td>${c.startTime}${c.endTime ? ' - ' + c.endTime : ''}</td>
-        <td><button class="btn btn-sm" data-template-id="${c.templateId}" data-date="${c.date}" data-going="${c.going ? '0' : '1'}">
-          ${c.going ? "Going ✓ (tap to cancel)" : "I'm going"}
+        <td>${spotsText}</td>
+        <td><button class="btn btn-sm" data-template-id="${c.templateId}" data-date="${c.date}" data-going="${c.going ? '0' : '1'}" ${blocked ? 'disabled' : ''}>
+          ${label}
         </button></td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
 
-    upcomingBody.querySelectorAll('button[data-template-id]').forEach((btn) => {
+    upcomingBody.querySelectorAll('button[data-template-id]:not([disabled])').forEach((btn) => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         try {
-          await fetchJson('/api/student/rsvp', {
+          const { data } = await fetchJson('/api/student/rsvp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -81,6 +91,11 @@
               going: btn.dataset.going === '1',
             }),
           });
+          if (!data.ok) {
+            upcomingStatus.textContent = data.error || 'Could not update your RSVP.';
+          } else {
+            upcomingStatus.textContent = '';
+          }
           await loadUpcoming();
         } finally {
           btn.disabled = false;
@@ -94,7 +109,7 @@
     if (data.ok) {
       renderUpcoming(data.upcoming);
     } else {
-      upcomingBody.innerHTML = `<tr><td colspan="4">${escapeHtml(data.error || 'Could not load upcoming classes.')}</td></tr>`;
+      upcomingBody.innerHTML = `<tr><td colspan="5">${escapeHtml(data.error || 'Could not load upcoming classes.')}</td></tr>`;
     }
   }
 
