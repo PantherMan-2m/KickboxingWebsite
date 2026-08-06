@@ -1,5 +1,6 @@
 import { jsonResponse } from '../_utils/auth.js';
-import { dayOfWeekFor, todayIso, addDaysIso, RSVP_WINDOW_DAYS } from '../_utils/dates.js';
+import { todayIso, addDaysIso, RSVP_WINDOW_DAYS } from '../_utils/dates.js';
+import { expandTemplates } from '../_utils/schedule.js';
 
 export async function onRequestGet(context) {
   const start = todayIso();
@@ -9,6 +10,7 @@ export async function onRequestGet(context) {
     `SELECT id, day_of_week AS dayOfWeek, name, start_time AS startTime, end_time AS endTime, capacity
      FROM class_templates WHERE active = 1`
   ).all();
+  const templateCapacityMap = new Map(templates.map((t) => [t.id, t.capacity]));
 
   const { results: rsvps } = await context.env.DB.prepare(
     `SELECT template_id AS templateId, session_date AS date FROM session_rsvps
@@ -43,29 +45,19 @@ export async function onRequestGet(context) {
     .all();
   const overrideMap = new Map(sessionOverrides.map((s) => [`${s.templateId}|${s.date}`, s.capacity]));
 
-  const upcoming = [];
-  for (const date of dates) {
-    const dow = dayOfWeekFor(date);
-    for (const t of templates) {
-      if (t.dayOfWeek !== dow) continue;
-      const key = `${t.id}|${date}`;
-      const sessionCapacity = overrideMap.get(key);
-      const capacity = sessionCapacity !== undefined && sessionCapacity !== null ? sessionCapacity : t.capacity;
-      const attending = attendingMap.get(key) || 0;
-      upcoming.push({
-        templateId: t.id,
-        date,
-        name: t.name,
-        startTime: t.startTime,
-        endTime: t.endTime,
-        going: goingSet.has(key),
-        capacity,
-        attending,
-        full: capacity !== null && attending >= capacity,
-      });
-    }
-  }
-  upcoming.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  const upcoming = expandTemplates(templates, dates).map((e) => {
+    const key = `${e.templateId}|${e.date}`;
+    const sessionCapacity = overrideMap.get(key);
+    const capacity = sessionCapacity !== undefined && sessionCapacity !== null ? sessionCapacity : templateCapacityMap.get(e.templateId);
+    const attending = attendingMap.get(key) || 0;
+    return {
+      ...e,
+      going: goingSet.has(key),
+      capacity,
+      attending,
+      full: capacity !== null && attending >= capacity,
+    };
+  });
 
   return jsonResponse({ ok: true, upcoming });
 }

@@ -30,6 +30,11 @@
 
 <main>
   <section class="container section">
+    <h2>Next class</h2>
+    <div id="nextClassPanel" class="card">Loading…</div>
+  </section>
+
+  <section class="container section">
     <h2>Coach dashboard</h2>
     <ul class="badges">
       <li><a href="/coach/students.html">Manage students</a></li>
@@ -46,6 +51,34 @@
   </div>
 </footer>
 
-<script src="/app.js?v=1"></script>
+<script src="/app.js?v=2"></script>
+<script>
+  async function loadNextClass() {
+    const panel = document.getElementById('nextClassPanel');
+    const { data } = await fetchJson('/api/coach/next-class');
+    if (!data.ok) {
+      panel.innerHTML = `<p class="muted">${escapeHtml(data.error || 'Could not load the next class.')}</p>`;
+      return;
+    }
+    if (!data.nextClass) {
+      panel.innerHTML = '<p class="muted">No classes scheduled in the next 7 days.</p>';
+      return;
+    }
+
+    const c = data.nextClass;
+    // capacity: null means unlimited -- render "N going", not "N / null".
+    const attendingText = c.capacity === null
+      ? `${c.attending} going`
+      : `${c.attending} / ${c.capacity} going (${c.spotsRemaining} spot${c.spotsRemaining === 1 ? '' : 's'} left)`;
+
+    panel.innerHTML = `
+      <p><strong>${escapeHtml(c.name)}</strong></p>
+      <p class="muted">${c.date}${c.startTime ? ' · ' + c.startTime : ''}${c.endTime ? ' - ' + c.endTime : ''}</p>
+      <p>${attendingText}</p>
+    `;
+  }
+
+  loadNextClass();
+</script>
 </body>
 </html>

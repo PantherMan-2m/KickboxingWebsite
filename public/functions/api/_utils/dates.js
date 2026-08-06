@@ -26,8 +26,20 @@ export function dayOfWeekFor(dateStr) {
 // returns the wrong day for roughly two hours after UTC midnight. Takes an
 // optional `now` for testability; real callers always use the default.
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
+
+// Both the SAST calendar date and the SAST time-of-day ('HH:MM'), from one shifted
+// Date -- so a caller needing both (T2.4's "is this class later today") never risks
+// them disagreeing by being computed from two separately-constructed Dates.
+export function sastNowParts(now = new Date()) {
+  const sast = new Date(now.getTime() + SAST_OFFSET_MS);
+  return { date: sast.toISOString().slice(0, 10), time: sast.toISOString().slice(11, 16) };
+}
+
+// public/app.js's sastTodayIso() duplicates this fixed-offset logic for the browser --
+// see that function's comment for why (no build step, so a plain <script> can't import
+// this ES module). Keep the two offsets in sync; test/unit/shared-frontend.test.mjs pins it.
 export function todayIso(now = new Date()) {
-  return new Date(now.getTime() + SAST_OFFSET_MS).toISOString().slice(0, 10);
+  return sastNowParts(now).date;
 }
 
 export function addDaysIso(dateStr, days) {

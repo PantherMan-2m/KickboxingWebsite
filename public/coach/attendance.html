@@ -71,15 +71,8 @@
   </div>
 </footer>
 
-<script src="/app.js?v=1"></script>
+<script src="/app.js?v=2"></script>
 <script>
-  function todayLocalIso() {
-    const d = new Date();
-    const offset = d.getTimezoneOffset();
-    const local = new Date(d.getTime() - offset * 60000);
-    return local.toISOString().slice(0, 10);
-  }
-
   // Reads ?date= from the URL (coach/session.html's back link sets this so
   // the coach lands back on the date they came from, not today). Rejects a
   // malformed value -- including a well-formed but impossible calendar date
@@ -94,7 +87,7 @@
   }
 
   const dateInput = document.getElementById('dateInput');
-  dateInput.value = dateFromQuery() || todayLocalIso();
+  dateInput.value = dateFromQuery() || sastTodayIso();
 
   async function createSessionFromTemplate(templateId, date) {
     const { data } = await fetchJson('/api/coach/sessions', {
