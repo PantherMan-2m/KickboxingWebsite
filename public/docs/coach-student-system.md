@@ -1,10 +1,10 @@
 # Coach/Student Login & Attendance System — Usage Guide
 
-**Status**: Phase 1, Phase 2 (self-signup + approval), and Phase 3 (class RSVPs)
-complete and live (2026-08-04); Phase 0 (foundation) and Phase 1 (shared `app.js`,
-navigation fixes) complete, Phase 1 pending merge to `main` as of 2026-08-06 — see
-`HANDOVER.md` for current branch state. This is a living document — update it (don't
-replace it) as new features land. See `TODO.md` (outer folder) for what's not built yet.
+**Status**: self-signup + approval, class RSVPs, shared `app.js` + navigation fixes, and
+class capacity + RSVP enforcement (`PLAN.md`'s Phase 2) all complete and live as of
+2026-08-07 — see `HANDOVER.md` for current branch state. This is a living document —
+update it (don't replace it) as new features land. See `TODO.md` (outer folder) for
+what's not built yet.
 
 This is the plain-English usage guide. For schema, endpoints, and security mechanics,
 see **`coach-student-system-technical.md`** in this same folder.
@@ -46,44 +46,62 @@ back, follow up with a coach directly.
 
 ## Coach walkthrough
 
-1. **Dashboard** (`/coach/dashboard.html`) — landing page with shortcuts to everything else.
+1. **Dashboard** (`/coach/dashboard.html`) — landing page with shortcuts to everything
+   else, plus a **Next class** panel showing the soonest upcoming class (name, date,
+   time, and a live "N going" / "N / capacity going (M spots left)" headcount). Empty if
+   nothing's scheduled in the next 7 days.
 2. **Students** (`/coach/students.html`) — add a student (name + email). This creates
    their account with a random temporary password and emails it to them via Resend. If
    the email fails to send, the temporary password is shown on-screen instead so you can
    hand it over directly. You can also deactivate/reactivate a student here (deactivating
    removes them from future attendance-marking rosters, but keeps their history intact —
-   nothing is ever hard-deleted).
+   nothing is ever hard-deleted). A search box (name/email, filters as you type) and a
+   status filter (all/active/inactive) sit above the roster table, useful once it's grown
+   past a quick scan.
 3. **Requests** (`/coach/requests.html`) — anyone who submitted the public "request an
    account" form shows up here. **Approve** activates their account and emails a
    temporary password (same mechanics as adding a student directly, including the
    on-screen fallback if the email fails). **Reject** deletes the request outright —
    there's no "rejected" state to revisit, so only reject requests you're sure about.
 4. **Schedule** (`/coach/templates.html`) — define the recurring weekly classes (day,
-   time, name). This is the *template*, not actual dated sessions.
+   time, name, and an optional **capacity**). This is the *template*, not actual dated
+   sessions. Leave capacity blank for unlimited; each row in the table also has its own
+   capacity field + Save button, so you can set or clear it later without re-adding the
+   class. Capacity here applies to every future occurrence of that weekly class unless a
+   specific date is overridden (see step 6).
 5. **Attendance** (`/coach/attendance.html`) — pick a date. If that date matches a
    weekly template (e.g. it's a Tuesday and you have a Tuesday class), you'll see a
    "Create session" button for it. You can also add a one-off extra session for any date
    (e.g. an extra Friday class) without touching the weekly template. Either way, this
    creates a `class_sessions` row you can then open to mark attendance.
-6. **Marking attendance** (`/coach/session.html?id=...`) — shows the full active student
-   roster with an RSVP column (✓ Going if that student RSVP'd for this date's class) next
-   to present/absent/excused radio buttons per student (defaults to absent). The RSVP
-   column is only ever populated for sessions created from a weekly template — one-off
-   sessions have no RSVPs to show, since students can only RSVP to the recurring
-   schedule (see "What's deliberately not built yet" in the technical reference). Save
-   writes the whole roster at once. You can reopen a session later and it'll pre-fill
-   from whatever was last saved, so amending attendance after the fact is safe. A back
-   link at the top returns to Attendance with the same date still selected.
+6. **Marking attendance** (`/coach/session.html?id=...`) — shows the class's capacity
+   (inherited from the weekly template unless you set a **capacity override** just for
+   this date, right below the class title — leave it blank to go back to inheriting),
+   the full active student roster with an RSVP column (✓ Going if that student RSVP'd
+   for this date's class) next to present/absent/excused radio buttons per student.
+   **A session that's never been saved pre-fills present for everyone who RSVP'd going**
+   (everyone else defaults absent) — turns roster marking from many clicks into
+   correcting the couple of exceptions. One-off sessions (no weekly template behind
+   them) always default everyone absent, since there's nothing to RSVP against. Save
+   writes the whole roster at once. Reopening an already-saved session shows exactly
+   what you last saved, not the RSVP pre-fill again — so amending attendance after the
+   fact is always safe. A back link at the top returns to Attendance with the same date
+   still selected.
 
 ## Student walkthrough
 
 Log in → lands on `/student/dashboard.html` → see a table of every session you've been
 marked in, with date, class name, and status. The **Upcoming classes**
 (`/student/upcoming.html`) nav link shows the next 7 days of recurring weekly classes,
-each with an "I'm going" button — tap it to RSVP, tap again to cancel. This is just a
-heads-up for the coach; it doesn't create or replace an actual attendance record, and
-you're not locked out of a class you didn't RSVP to (or penalized for RSVPing and not
-showing).
+each with a spots-remaining count and an "I'm going" button — tap it to RSVP, tap again
+to cancel. This is a heads-up for the coach; it doesn't create or replace an actual
+attendance record, and you're not locked out of a class you didn't RSVP to (or penalized
+for RSVPing and not showing).
+
+If a coach has set a capacity and the class fills up, the button shows **"Full"** and is
+disabled for anyone not already going — but if you RSVP'd before it filled, your
+"Going ✓ (tap to cancel)" button keeps working, so you're never stuck unable to cancel.
+Classes with no capacity set behave exactly as before (unlimited).
 
 ## Bootstrapping a coach account
 

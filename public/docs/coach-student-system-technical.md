@@ -145,8 +145,8 @@ environment" above for why it spawns `wrangler` directly via `node <wrangler.js>
 
 ## Database schema
 
-Full DDL lives in `migrations/0001_initial.sql` and `migrations/0002_session_rsvps.sql`.
-Six tables:
+Full DDL lives in `migrations/0001_initial.sql`, `migrations/0002_session_rsvps.sql`,
+and `migrations/0003_class_capacity.sql`. Six tables:
 
 - **`users`** — coaches and students both live here, distinguished by `role` ('coach'/
   'student'). `status` ('active'/'inactive'/'pending' — 'pending' is a self-signup
@@ -159,11 +159,23 @@ Six tables:
 - **`sessions`** — *login* sessions (cookie-backed), not class sessions. DB-backed
   (rather than a stateless signed cookie) specifically so logout/revocation is real and
   a coach could force-invalidate a session if needed.
-- **`class_templates`** — the recurring weekly schedule (day-of-week + time + name).
+- **`class_templates`** — the recurring weekly schedule (day-of-week + time + name),
+  plus `capacity` (INTEGER, nullable — `0003`). `NULL` means unlimited.
 - **`class_sessions`** — actual dated instances. `template_id` links back to a template
   if it was auto-suggested, or is `NULL` for a one-off (e.g. an extra Friday class). A
   partial unique index (`template_id, session_date`) prevents accidentally creating two
   sessions for the same template on the same date, while leaving one-offs unconstrained.
+  Also has `capacity` (INTEGER, nullable — `0003`), an optional per-date override.
+
+  **Effective capacity resolution rule** (used by `templates/[id].js`'s effective view,
+  `sessions/[id].js`'s GET, `student/rsvp.js`'s enforcement, `student/upcoming.js`'s
+  per-row display, and `coach/next-class.js`): `COALESCE(class_sessions.capacity,
+  class_templates.capacity)` for a given `template_id` + `session_date`. The
+  `class_sessions` row may not exist yet (coaches often create it same-day, after
+  students have already RSVP'd) — no row means "use the template's capacity" exactly
+  like a row whose own `capacity` is `NULL`. A session's capacity column is **never
+  copied** from the template at creation time, so a later template capacity change
+  flows through to every session that hasn't set its own override.
 - **`attendance`** — one row per (session, student), written for the *entire* active
   roster when a coach saves (not just who was present) — this is what makes "did this
   student attend" and "reopen and amend" both simple queries instead of needing to infer
@@ -212,17 +224,50 @@ Six tables:
 - `functions/api/_utils/email.js` — thin Resend wrapper, deliberately separate from the
   pre-existing `functions/api/contact.js` so that already-working file stays untouched.
 - `functions/api/_utils/dates.js` — `isValidDate`, `dayOfWeekFor`, `todayIso`,
-  `addDaysIso`, `RSVP_WINDOW_DAYS`. Used by both `coach/sessions.js` (matching a date to
-  a weekly template) and `student/upcoming.js`/`student/rsvp.js` (the 7-day window).
+  `addDaysIso`, `RSVP_WINDOW_DAYS`, and (Phase 2) `sastNowParts(now = new Date())`
+  returning `{ date, time }` (`time` as `'HH:MM'`) from one shifted `Date` — `todayIso`
+  now delegates to it (`sastNowParts(now).date`), confirmed behaviour-preserving against
+  the existing SAST-vs-UTC regression tests. Used across `coach/sessions.js` (matching a
+  date to a weekly template), `student/upcoming.js`/`student/rsvp.js` (the 7-day window),
+  and `coach/next-class.js` (needs both the date and the time-of-day).
+- `functions/api/_utils/body.js` (Phase 2, T2.0) — `parseJsonBody(context)`, the shared
+  parse-and-reject-non-object-JSON logic `student/rsvp.js` had inline before. Adopted in
+  the four routes Phase 2 opened (`coach/templates.js`, `coach/templates/[id].js`,
+  `coach/sessions.js`, `coach/sessions/[id].js`) plus `student/rsvp.js` itself. Seven
+  pre-existing handlers still throw a bare 500 on a literal JSON `null` body — logged in
+  `TODO.md`, fixed file-by-file as future phases open them.
+- `functions/api/_utils/capacity.js` (Phase 2, T2.2) — `parseCapacity(value)`, the
+  server-side validation shared by every capacity-accepting route: a positive integer,
+  or `null`/`undefined`/`''` meaning unlimited; rejects by `typeof` before any numeric
+  coercion (so `true`/`[1]`/`{}` — which `Number()` would otherwise coerce to `1` — are
+  rejected outright, not accepted as capacity 1).
+- `functions/api/_utils/schedule.js` (Phase 2, T2.4) — `expandTemplates(templates,
+  dates)`, extracted from `student/upcoming.js`'s original inline expansion (pinned
+  behaviour-preserving by a test written before the refactor) and now shared with
+  `coach/next-class.js`; and `selectNextClass(templates, today, nowTime, windowDays)`, a
+  pure function (no clock reads of its own) picking the earliest `(date, startTime)` a
+  class starting on `today` only survives if `startTime >= nowTime`. Being pure is what
+  makes the mid-week/later-today/week-rollover/00:30-SAST-boundary scenarios
+  unit-testable without touching the real clock.
 - `public/app.js` (Phase 1, T1.1) — shared frontend behaviour: the nav/hamburger toggle,
-  the logout handler, `escapeHtml`, the `#year` footer stamp, and a
+  the logout handler, `escapeHtml`, the `#year` footer stamp, a
   `fetchJson(url, options)` wrapper (`fetch` + `.json()` in one call, catching a network
   failure or non-JSON body and returning a synthetic `{ok:false, error}` instead of
-  throwing). Every DOM lookup inside it is guarded — three pages (`login.html`,
+  throwing), and (Phase 2, T2.4) `sastTodayIso()` — computed from `Date.now()` + a fixed
+  +2h offset (no `getTimezoneOffset()` call, so it's structurally independent of the
+  visiting browser's local timezone), mirroring `_utils/dates.js`'s server-side
+  `todayIso()`. Duplicated rather than imported, since this is a plain browser
+  `<script>` with no bundler and that's a server ES module — the same no-build-step
+  tradeoff already accepted for `dateFromQuery()`/`isValidDate()` in Phase 1. Each copy's
+  comment names the other; `test/unit/shared-frontend.test.mjs` asserts both carry the
+  same offset. `coach/attendance.html` calls it for its date-input default, replacing
+  the old browser-local `todayLocalIso()` (deleted — it was the third, disagreeing
+  notion of "today" alongside the server's SAST `todayIso()` and plain UTC `new Date()`).
+  Every DOM lookup inside `app.js` is guarded — three pages (`login.html`,
   `change-password.html`, `request-account.html`) have a logo-only header with none of
   the nav/logout elements.
 
-  **Load order, and why it matters**: `<script src="/app.js?v=1"></script>` (a plain
+  **Load order, and why it matters**: `<script src="/app.js?v=2"></script>` (a plain
   script, *not* `defer`) is placed immediately before each page's own trailing inline
   `<script>` at the end of `<body>` — not in `<head>`. Both are ordinary blocking scripts,
   so the browser executes them strictly in document order: `app.js` always finishes before
@@ -251,15 +296,17 @@ Six tables:
 | `/api/coach/students/:id` | PATCH | coach | `{status}` activate/deactivate |
 | `/api/coach/requests` | GET | coach | list `pending` users |
 | `/api/coach/requests/:id` | PATCH | coach | `{action:'approve'|'reject'}` — approve activates + emails temp password; reject deletes the row |
-| `/api/coach/templates` | GET/POST | coach | list/create recurring weekly classes |
-| `/api/coach/templates/:id` | PATCH | coach | `{active}` toggle |
-| `/api/coach/sessions?date=` | GET | coach | template suggestions + existing sessions for a date |
-| `/api/coach/sessions` | POST | coach | create from template (idempotent) or one-off |
-| `/api/coach/sessions/:id` | GET | coach | session detail + roster merged with existing attendance |
+| `/api/coach/templates` | GET/POST | coach | list (with `capacity`) / create recurring weekly classes (`capacity` optional, validated by `parseCapacity`) |
+| `/api/coach/templates/:id` | PATCH | coach | **partial update** (Phase 2, T2.2) — `{active}` and/or `{capacity}`, at least one required; a body with neither is rejected |
+| `/api/coach/sessions?date=` | GET | coach | template suggestions + existing sessions for a date, both now include `capacity` |
+| `/api/coach/sessions` | POST | coach | create from template (idempotent, capacity **not** copied from the template — see resolution rule above) or one-off |
+| `/api/coach/sessions/:id` | GET | coach | session detail + roster merged with existing attendance; also returns `capacity` (this session's own), `effectiveCapacity` (resolved), and `attendanceSaved` (Phase 2, T2.5 — `true` once any attendance row exists for this session, letting the client distinguish "never saved" from "saved with everyone absent") |
+| `/api/coach/sessions/:id` | PATCH | coach | (Phase 2, T2.2) `{capacity}` — the per-session override; `null`/`''` clears back to inheriting the template |
 | `/api/coach/mark-attendance` | POST | coach | `{sessionId,records:[{userId,status}]}`, atomic via `D1Database.batch()` |
+| `/api/coach/next-class` | GET | coach | (Phase 2, T2.4) `{nextClass: null \| {templateId,name,date,startTime,endTime,attending,capacity,spotsRemaining}}` — the soonest class in the next `RSVP_WINDOW_DAYS` days, `null` if nothing's scheduled |
 | `/api/student/attendance` | GET | student | own history only |
-| `/api/student/upcoming` | GET | student | next 7 days of weekly-template classes, merged with own RSVPs |
-| `/api/student/rsvp` | POST | student | `{templateId,date,going}` → insert/delete own `session_rsvps` row |
+| `/api/student/upcoming` | GET | student | next 7 days of weekly-template classes, merged with own RSVPs; each row also has `capacity`, `attending` (everyone's RSVP count, not just the caller's), and `full` |
+| `/api/student/rsvp` | POST | student | `{templateId,date,going}` → insert/delete own `session_rsvps` row. On `going:true` against a class at capacity: **409** `{ok:false, error:'This class is full'}` — a deliberate new status code (the rest of this API only uses 400/404), so Phase 3's waitlist has a distinct signal to hook. A student who already has a row is never rejected (idempotent re-RSVP); the capacity check itself is atomic (`INSERT...SELECT...WHERE COUNT(*) < capacity`, not read-then-insert) so two students racing for the last spot can't both win, with `ON CONFLICT...DO NOTHING` covering a double-submit from the same student racing its own existing-row check. |
 
 ## Frontend notes
 
@@ -275,8 +322,8 @@ Six tables:
   picker icon, checkboxes) render dark-aware instead of near-invisible light-mode
   defaults.
 - **Cache-busting**: every page's `styles.css` reference includes a version query string
-  (`styles.css?v=4` as of this writing), and `app.js` likewise (`app.js?v=1`). **Bump the
-  relevant number on every future change to that asset, on every page that references
+  (`styles.css?v=4` as of this writing), and `app.js` likewise (`app.js?v=2` as of Phase
+  2's T2.4). **Bump the relevant number on every future change to that asset, on every page that references
   it** — Cloudflare serves the HTML itself with `max-age=0` (always fresh), but static
   assets get a 4-hour browser cache; without the version bump, visitors can keep seeing a
   stale asset for hours after a fix ships. This bit us twice during development before
@@ -299,3 +346,7 @@ Six tables:
   the usage guide's "Common maintenance tasks").
 - No IP-based rate limiting on `/api/auth/login`, only the per-account lockout above.
   Fine at gym scale; revisit if abuse ever shows up.
+- No waitlist yet: a full class's RSVP just returns 409, with nothing to join. Phase 3
+  turns that rejection into a waitlist offer + coach notification — deliberately
+  sequenced this way so capacity enforcement (Phase 2) and the waitlist (Phase 3) aren't
+  built in one pass.
