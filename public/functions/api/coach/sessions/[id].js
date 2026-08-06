@@ -1,11 +1,19 @@
 import { jsonResponse } from '../../_utils/auth.js';
+import { parseJsonBody } from '../../_utils/body.js';
+import { parseCapacity } from '../../_utils/capacity.js';
 
 export async function onRequestGet(context) {
   const { id } = context.params;
 
+  // Effective capacity: COALESCE(class_sessions.capacity, class_templates.capacity).
+  // A one-off session (template_id NULL) has nothing to inherit, so the LEFT JOIN's
+  // NULL template capacity coalesces to session.capacity either way.
   const session = await context.env.DB.prepare(
-    `SELECT id, session_date AS date, name, start_time AS startTime, end_time AS endTime, template_id AS templateId
-     FROM class_sessions WHERE id = ?`
+    `SELECT cs.id, cs.session_date AS date, cs.name, cs.start_time AS startTime, cs.end_time AS endTime,
+            cs.template_id AS templateId, cs.capacity, ct.capacity AS templateCapacity
+     FROM class_sessions cs
+     LEFT JOIN class_templates ct ON ct.id = cs.template_id
+     WHERE cs.id = ?`
   )
     .bind(id)
     .first();
@@ -41,7 +49,46 @@ export async function onRequestGet(context) {
 
   return jsonResponse({
     ok: true,
-    session,
+    session: {
+      id: session.id,
+      date: session.date,
+      name: session.name,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      templateId: session.templateId,
+      capacity: session.capacity,
+      effectiveCapacity: session.capacity !== null ? session.capacity : session.templateCapacity,
+    },
     roster: roster.map((r) => ({ ...r, status: r.status || 'absent', going: goingIds.has(r.id) })),
   });
+}
+
+// The per-session capacity override -- created on the session's own page (see T2.2's
+// amended note on why coach/attendance.html's bare "Create session" button has nowhere
+// to put this field). Capacity-only: `active` doesn't apply to a class_sessions row.
+export async function onRequestPatch(context) {
+  const { id } = context.params;
+  const parsed = await parseJsonBody(context);
+  if (!parsed.ok) {
+    return jsonResponse({ ok: false, error: 'Malformed request' }, { status: 400 });
+  }
+  const body = parsed.body;
+
+  if (!('capacity' in body)) {
+    return jsonResponse({ ok: false, error: 'capacity is required' }, { status: 400 });
+  }
+  const capacityResult = parseCapacity(body.capacity);
+  if (!capacityResult.ok) {
+    return jsonResponse({ ok: false, error: capacityResult.error }, { status: 400 });
+  }
+
+  const result = await context.env.DB.prepare('UPDATE class_sessions SET capacity = ? WHERE id = ?')
+    .bind(capacityResult.capacity, id)
+    .run();
+
+  if (result.meta.changes === 0) {
+    return jsonResponse({ ok: false, error: 'Session not found' }, { status: 404 });
+  }
+
+  return jsonResponse({ ok: true });
 }
