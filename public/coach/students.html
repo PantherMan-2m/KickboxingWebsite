@@ -45,6 +45,17 @@
 
   <section class="container section">
     <h2>Roster</h2>
+    <div class="card form" style="max-width:420px">
+      <label for="searchInput">Search</label>
+      <input id="searchInput" type="text" placeholder="Name or email" autocomplete="off" />
+
+      <label for="statusFilter">Status</label>
+      <select id="statusFilter">
+        <option value="all" selected>All</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+      </select>
+    </div>
     <div class="scroll-x">
       <table class="schedule" id="rosterTable">
         <thead>
@@ -67,10 +78,30 @@
 <script src="/app.js?v=2"></script>
 <script>
   const rosterBody = document.getElementById('rosterBody');
+  const searchInput = document.getElementById('searchInput');
+  const statusFilter = document.getElementById('statusFilter');
+
+  // The roster is fully loaded client-side already (gym scale, not 500+ students), so
+  // filtering it here avoids a new endpoint. allStudents holds the unfiltered fetch;
+  // applyFilters() derives what's actually rendered.
+  let allStudents = [];
+
+  function applyFilters() {
+    const term = searchInput.value.trim().toLowerCase();
+    const status = statusFilter.value;
+    const filtered = allStudents.filter((s) => {
+      const matchesTerm = !term || s.name.toLowerCase().includes(term) || s.email.toLowerCase().includes(term);
+      const matchesStatus = status === 'all' || s.status === status;
+      return matchesTerm && matchesStatus;
+    });
+    renderRoster(filtered);
+  }
 
   function renderRoster(students) {
     if (students.length === 0) {
-      rosterBody.innerHTML = '<tr><td colspan="4">No students yet.</td></tr>';
+      rosterBody.innerHTML = allStudents.length === 0
+        ? '<tr><td colspan="4">No students yet.</td></tr>'
+        : '<tr><td colspan="4">No matching students.</td></tr>';
       return;
     }
     rosterBody.innerHTML = students.map((s) => `
@@ -104,11 +135,15 @@
   async function loadRoster() {
     const { data } = await fetchJson('/api/coach/students');
     if (data.ok) {
-      renderRoster(data.students);
+      allStudents = data.students;
+      applyFilters();
     } else {
       rosterBody.innerHTML = `<tr><td colspan="4">${escapeHtml(data.error || 'Could not load roster.')}</td></tr>`;
     }
   }
+
+  searchInput.addEventListener('input', applyFilters);
+  statusFilter.addEventListener('change', applyFilters);
 
   document.getElementById('addStudentForm').addEventListener('submit', async (e) => {
     e.preventDefault();
