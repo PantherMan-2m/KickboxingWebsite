@@ -69,16 +69,11 @@ window.addEventListener('scroll', () => {
 // way to know server-side session state -- a public, always-200 endpoint
 // (see functions/api/auth/session.js) that never 401s or redirects, so the
 // homepage never looks broken to an anonymous visitor with devtools open.
-// Deferred to DOMContentLoaded (not called immediately): this script runs
-// during document parsing, before app.js's `defer`red execution actually
-// completes -- see the same-shaped comment in coach/attendance.html for why
-// calling fetchJson() here directly would reference it before app.js has
-// defined it.
-document.addEventListener('DOMContentLoaded', async () => {
+(async () => {
   const { data } = await fetchJson('/api/auth/session');
   if (!data.user) return;
   const loginLink = document.querySelector('.nav-links a[href="/login.html"]');
   if (!loginLink) return;
   loginLink.textContent = 'My dashboard';
   loginLink.href = data.user.role === 'coach' ? '/coach/dashboard.html' : '/student/dashboard.html';
-});
+})();

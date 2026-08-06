@@ -10,10 +10,20 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// On a network failure or a non-JSON response body (a Cloudflare edge error
+// page, an offline visitor), returns a synthetic {ok:false, error} data shape
+// instead of throwing -- callers already branch on `data.ok`/`data.error` for
+// the server's own failure responses, so this reuses that same path instead
+// of requiring every caller to also wrap fetchJson in try/catch. `response`
+// is null in this case; callers checking `response.ok` must use `response?.ok`.
 async function fetchJson(url, options) {
-  const response = await fetch(url, options);
-  const data = await response.json();
-  return { response, data };
+  try {
+    const response = await fetch(url, options);
+    const data = await response.json();
+    return { response, data };
+  } catch (error) {
+    return { response: null, data: { ok: false, error: 'Network error. Please try again.' } };
+  }
 }
 
 const yearEl = document.getElementById('year');
@@ -23,6 +33,12 @@ const navMenu = document.querySelector('.nav-links');
 const menuBtn = document.querySelector('.menu-toggle');
 
 if (navMenu && menuBtn) {
+  const closeMenu = () => {
+    navMenu.classList.remove('open');
+    menuBtn.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('body-lock');
+  };
+
   menuBtn.addEventListener('click', () => {
     const isOpen = navMenu.classList.toggle('open');
     menuBtn.setAttribute('aria-expanded', String(isOpen));
@@ -30,19 +46,11 @@ if (navMenu && menuBtn) {
   });
 
   navMenu.querySelectorAll('a').forEach((a) => {
-    a.addEventListener('click', () => {
-      navMenu.classList.remove('open');
-      menuBtn.setAttribute('aria-expanded', 'false');
-      document.body.classList.remove('body-lock');
-    });
+    a.addEventListener('click', closeMenu);
   });
 
   window.addEventListener('scroll', () => {
-    if (navMenu.classList.contains('open')) {
-      navMenu.classList.remove('open');
-      menuBtn.setAttribute('aria-expanded', 'false');
-      document.body.classList.remove('body-lock');
-    }
+    if (navMenu.classList.contains('open')) closeMenu();
   }, { passive: true });
 }
 

@@ -28,7 +28,7 @@ const PAGES = [
 ];
 
 for (const page of PAGES) {
-  test(`${page} references /app.js?v= and has no leftover duplicated nav/escapeHtml code`, () => {
+  test(`${page} references /app.js?v= and has no leftover duplicated nav/logout/escapeHtml/year code`, () => {
     const html = fs.readFileSync(path.join(PUBLIC_DIR, page), 'utf8');
     assert.match(html, /\/app\.js\?v=/, `expected ${page} to reference /app.js?v=`);
     assert.doesNotMatch(
@@ -40,6 +40,16 @@ for (const page of PAGES) {
       html,
       /function escapeHtml/,
       `expected ${page} to have no leftover local escapeHtml definition (should live in app.js only)`
+    );
+    assert.doesNotMatch(
+      html,
+      /getElementById\('logoutLink'\)\.addEventListener/,
+      `expected ${page} to have no leftover inline logout handler (should live in app.js only)`
+    );
+    assert.doesNotMatch(
+      html,
+      /getElementById\('year'\)\.textContent\s*=/,
+      `expected ${page} to have no leftover inline #year stamp (should live in app.js only)`
     );
   });
 }

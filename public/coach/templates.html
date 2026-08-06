@@ -10,7 +10,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=4" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-  <script defer src="/app.js?v=1"></script>
 </head>
 <body>
 <header class="site-header">
@@ -79,13 +78,17 @@
   </div>
 </footer>
 
+<script src="/app.js?v=1"></script>
 <script>
   const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const templatesBody = document.getElementById('templatesBody');
 
   async function loadTemplates() {
     const { data } = await fetchJson('/api/coach/templates');
-    if (!data.ok) return;
+    if (!data.ok) {
+      templatesBody.innerHTML = `<tr><td colspan="3">${escapeHtml(data.error || 'Could not load schedule.')}</td></tr>`;
+      return;
+    }
     if (data.templates.length === 0) {
       templatesBody.innerHTML = '<tr><td colspan="3">No recurring classes set up yet.</td></tr>';
       return;
@@ -120,7 +123,7 @@
         }),
       });
 
-      if (!response.ok || !data.ok) {
+      if (!response?.ok || !data.ok) {
         status.textContent = data.error || 'Could not save.';
         return;
       }
@@ -135,9 +138,7 @@
     }
   });
 
-  // Deferred to DOMContentLoaded -- see the comment in coach/attendance.html
-  // for why calling loadTemplates() directly here would race app.js's fetchJson().
-  document.addEventListener('DOMContentLoaded', loadTemplates);
+  loadTemplates();
 </script>
 </body>
 </html>

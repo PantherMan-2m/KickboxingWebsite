@@ -10,7 +10,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=4" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-  <script defer src="/app.js?v=1"></script>
 </head>
 <body>
 <header class="site-header">
@@ -46,20 +45,23 @@
   </div>
 </footer>
 
+<script src="/app.js?v=1"></script>
 <script>
-  // Deferred to DOMContentLoaded -- see the comment in coach/attendance.html
-  // for why an immediately-invoked call here would race app.js's fetchJson().
-  document.addEventListener('DOMContentLoaded', async () => {
+  (async () => {
     const { data } = await fetchJson('/api/student/attendance');
     const body = document.getElementById('attendanceBody');
-    if (!data.ok || data.attendance.length === 0) {
+    if (!data.ok) {
+      body.innerHTML = `<tr><td colspan="3">${escapeHtml(data.error || 'Could not load attendance.')}</td></tr>`;
+      return;
+    }
+    if (data.attendance.length === 0) {
       body.innerHTML = '<tr><td colspan="3">No attendance recorded yet.</td></tr>';
       return;
     }
     body.innerHTML = data.attendance.map((a) => `
       <tr><td>${a.date}</td><td>${escapeHtml(a.name)}</td><td>${a.status}</td></tr>
     `).join('');
-  });
+  })();
 </script>
 </body>
 </html>

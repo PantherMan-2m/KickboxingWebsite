@@ -10,7 +10,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=4" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-  <script defer src="/app.js?v=1"></script>
 </head>
 <body>
 <header class="site-header">
@@ -72,6 +71,7 @@
   </div>
 </footer>
 
+<script src="/app.js?v=1"></script>
 <script>
   function todayLocalIso() {
     const d = new Date();
@@ -108,7 +108,12 @@
   async function loadForDate() {
     const date = dateInput.value;
     const { data } = await fetchJson(`/api/coach/sessions?date=${date}`);
-    if (!data.ok) return;
+    if (!data.ok) {
+      const errorHtml = `<p class="muted">${escapeHtml(data.error || 'Could not load sessions.')}</p>`;
+      document.getElementById('suggestedSessions').innerHTML = errorHtml;
+      document.getElementById('allSessions').innerHTML = errorHtml;
+      return;
+    }
 
     const suggestedEl = document.getElementById('suggestedSessions');
     if (data.templatesForDay.length === 0) {
@@ -163,7 +168,7 @@
         }),
       });
 
-      if (!response.ok || !data.ok) {
+      if (!response?.ok || !data.ok) {
         status.textContent = data.error || 'Could not create session.';
         return;
       }
@@ -175,13 +180,7 @@
     }
   });
 
-  // Deferred to DOMContentLoaded, not called immediately: this script runs
-  // during document parsing, before app.js's `defer`red execution (defer
-  // guarantees "before DOMContentLoaded", not "before inline scripts already
-  // in the document" -- an earlier draft of this task assumed the latter).
-  // Calling loadForDate() here directly would reference fetchJson()/escapeHtml()
-  // before app.js has defined them.
-  document.addEventListener('DOMContentLoaded', loadForDate);
+  loadForDate();
 </script>
 </body>
 </html>

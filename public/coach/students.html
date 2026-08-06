@@ -10,7 +10,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=4" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-  <script defer src="/app.js?v=1"></script>
 </head>
 <body>
 <header class="site-header">
@@ -65,6 +64,7 @@
   </div>
 </footer>
 
+<script src="/app.js?v=1"></script>
 <script>
   const rosterBody = document.getElementById('rosterBody');
 
@@ -88,7 +88,7 @@
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         try {
-          await fetch(`/api/coach/students/${btn.dataset.id}`, {
+          await fetchJson(`/api/coach/students/${btn.dataset.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: btn.dataset.status }),
@@ -103,7 +103,11 @@
 
   async function loadRoster() {
     const { data } = await fetchJson('/api/coach/students');
-    if (data.ok) renderRoster(data.students);
+    if (data.ok) {
+      renderRoster(data.students);
+    } else {
+      rosterBody.innerHTML = `<tr><td colspan="4">${escapeHtml(data.error || 'Could not load roster.')}</td></tr>`;
+    }
   }
 
   document.getElementById('addStudentForm').addEventListener('submit', async (e) => {
@@ -122,7 +126,7 @@
         body: JSON.stringify({ name: form.name.value, email: form.email.value }),
       });
 
-      if (!response.ok || !data.ok) {
+      if (!response?.ok || !data.ok) {
         status.textContent = data.error || 'Could not add student.';
         return;
       }
@@ -141,9 +145,7 @@
     }
   });
 
-  // Deferred to DOMContentLoaded -- see the comment in coach/attendance.html
-  // for why calling loadRoster() directly here would race app.js's fetchJson().
-  document.addEventListener('DOMContentLoaded', loadRoster);
+  loadRoster();
 </script>
 </body>
 </html>
