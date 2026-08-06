@@ -44,9 +44,10 @@ console-error check alone would have missed entirely.
 
 **Symptom**: navigating fresh to `coach/attendance.html` and waiting 1s, `get_page_text`
 showed both "Scheduled classes for this date" and "All sessions on this date" permanently
-stuck on `Loading…`. `read_console_messages` showed **no errors at all**. Manually
-re-invoking `loadForDate()` from the browser console (a few seconds later, in a separate
-call) worked immediately and rendered the page correctly.
+stuck on `Loading…`. `read_console_messages` (the browser tool's console-capture, not
+necessarily equivalent to what a real Chrome DevTools console would show — see the note
+below) reported no errors. Manually re-invoking `loadForDate()` from the browser console (a
+few seconds later, in a separate call) worked immediately and rendered the page correctly.
 
 **Diagnosis**: `PLAN.md`'s stated rationale for the load pattern — "`defer` guarantees it
 executes after the DOM is parsed and before each page's existing inline block at the end
@@ -60,14 +61,29 @@ bottom of that trailing script (`loadForDate()`, `loadRequests()`, `loadRoster()
 each of those, as its first synchronous statement, referenced `fetchJson` (defined in
 `app.js`) before `app.js` had run. Because the calling function is `async` and was invoked
 with no `await`/`.catch()` at the call site, the resulting `ReferenceError` became an
-**unhandled promise rejection with no visible console output**, and the page silently
-never populated.
+**unhandled promise rejection**, and the page silently never populated.
+
+**Correction (found at the post-review checkpoint)**: this report originally claimed the
+rejection produced "no console output at all." That overstates what's actually guaranteed —
+a real browser's console (e.g. Chrome DevTools) normally does log an unhandled promise
+rejection automatically. What was actually observed is narrower: the browser-automation
+tool's `read_console_messages` reported nothing, which may reflect that tool's
+console-capture not hooking into unhandled-rejection events specifically, rather than the
+error being invisible everywhere. The underlying bug this section describes is unaffected
+by this correction — only the phrasing was imprecise. **The fix described immediately below
+was later superseded** at the post-review checkpoint (see the branch's later commits): the
+`DOMContentLoaded` workaround was replaced with a load-order fix (`app.js` loaded as a
+plain, non-deferred script placed immediately before each page's own inline script, instead
+of `defer`red in `<head>`), which removes the race at its source instead of routing around
+it per page. This section is left as originally written for the historical record of how
+the bug was first found and understood; it does not describe the code as it exists now.
 
 **Reproduction, confirmed on a second page before assuming it was systemic**: same
-symptom on `coach/requests.html` — stuck on `Loading…`, zero console errors, fixed by the
-same change.
+symptom on `coach/requests.html` — stuck on `Loading…`, no error visible via the same
+tool, fixed by the same change.
 
-**Fix**: each affected page's final `functionName();` call replaced with
+**Original fix (superseded — see note above)**: each affected page's final
+`functionName();` call replaced with
 `document.addEventListener('DOMContentLoaded', functionName);` — `DOMContentLoaded` fires
 only after every deferred script (`app.js` included) has run, guaranteeing `fetchJson`/
 `escapeHtml` are defined by the time the listener fires. Applied to:

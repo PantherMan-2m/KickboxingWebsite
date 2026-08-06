@@ -30,7 +30,7 @@ in `reports/phase-0-completion.md`. Summary:
   re-running them).
 - Full local dev environment: `npm run dev` (Pages Functions + local D1 via
   `wrangler pages dev`) and `npm run db:reset` (wipe/re-migrate/seed, deterministic test
-  data). Non-obvious gotcha documented in `coach-student-system.md`: `wrangler pages dev`
+  data). Non-obvious gotcha documented in `coach-student-system-technical.md`: `wrangler pages dev`
   needs `--d1=DB=<database_id>` (not the database *name*) to bind to the same local D1
   the migration/seed commands use.
 - Automated test suite (`npm test`, Node's built-in test runner, 37 tests): unit tests for
@@ -89,8 +89,9 @@ in `reports/phase-0-completion.md`. Summary:
   a trustworthy safety net. The suite is ~65s. Revisit when that becomes painful, not
   before.
 
-## Phase 1 (shared frontend + navigation) — done and merged to `main`, see `reports/phase-1-completion.md`
-Built on branch `phase-1-shared-frontend`. `public/app.js` now owns nav/hamburger, logout,
+## Phase 1 (shared frontend + navigation) — built, NOT yet merged, see `reports/phase-1-completion.md`
+Built on branch `phase-1-shared-frontend`, currently 4 commits ahead of `main` (unmerged) —
+`main` is still at `2b10dad`. `public/app.js` now owns nav/hamburger, logout,
 `escapeHtml`, the `#year` stamp, and a `fetchJson` wrapper, shared by all 12 pages (net
 -253 lines); `script.js` keeps only the contact-form handler and the homepage-only
 header-hide-on-scroll effect. Every authenticated page's nav now has an explicit "Home"
@@ -106,6 +107,30 @@ T0.6b) and the plain UTC `new Date()` that would apply anywhere else untouched. 
 agree for a coach physically in South Africa and disagree for one travelling or on a VPN.
 Not fixed here — Phase 2's next-class panel (T2.3) builds directly on "today" for the
 coach dashboard and is where this should be resolved, per `PLAN.md`'s Phase 1 section.
+
+**Logged, not fixed (found during the post-T1.3 review, `reports/phase-1-review.md`)**:
+- **`public/coach/session.html:66`** — `load()`'s error branch interpolates `data.error`
+  directly into `innerHTML` unescaped (`` `<p>${data.error || 'Could not load session.'}</p>` ``).
+  Pre-existing, not introduced by Phase 1 — confirmed via `git diff` that this exact line
+  was unchanged context, not touched by the branch. Not currently exploitable: `/api/coach/sessions/:id`
+  only ever returns the static string `"Session not found"` today. Revisit if that endpoint's
+  error text ever becomes attacker-influenced.
+- **`public/functions/api/auth/session.js:16`** — the third independent hand-rolled
+  whitelist of `session.user` fields in this codebase, alongside `login.js`'s
+  `{id,name,role,mustChangePassword}` and `change-password.js`'s `{role}`. No shared helper
+  derives any of the three from one definition. Not a current bug — each is correctly
+  scoped for its own caller — but if a field is ever added to what `getSessionUser()`
+  builds (`_utils/auth.js:113-122`), there's no single place enforcing which response
+  should pick it up. Worth a small `toPublicUser(user)` helper if a fourth call site ever
+  needs one; not worth it for three short literals today.
+
+**Rejected (review finding #4, `reports/phase-1-review.md`)**: the suggestion that
+`coach/attendance.html`'s `dateFromQuery()` should share its validation algorithm with the
+server-side `isValidDate()` (`_utils/dates.js`) via `app.js`. `_utils/dates.js` is a
+server-side ES module (`export function`); sharing it with a plain browser `<script>` with
+no bundler would need a build step, which this project deliberately bans (see `PLAN.md`'s
+"Conventions inherited from the existing codebase"). The duplication is real (confirmed
+byte-identical) but the fix costs more than it's worth at this project's stated scale.
 
 ## Contact form: Resend wired up and confirmed working (done)
 `RESEND_API_KEY` is set in Cloudflare Pages (Production + Preview), the `cjnacademy.com`
