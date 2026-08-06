@@ -47,6 +47,17 @@ export async function onRequestGet(context) {
     goingIds = new Set(rsvps.map((r) => r.user_id));
   }
 
+  // `status: r.status || 'absent'` above collapses "no attendance row exists yet" and "a
+  // row exists saying absent" into the same value -- the client can't tell a never-saved
+  // session from a saved all-absent one from `status` alone. mark-attendance.js writes a
+  // row for the *whole* roster, not only those present, so a non-zero count here is a
+  // reliable "this session has been saved" signal for the client's pre-fill decision.
+  const attendanceCount = await context.env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM attendance WHERE session_id = ?'
+  )
+    .bind(id)
+    .first();
+
   return jsonResponse({
     ok: true,
     session: {
@@ -58,6 +69,7 @@ export async function onRequestGet(context) {
       templateId: session.templateId,
       capacity: session.capacity,
       effectiveCapacity: session.capacity !== null ? session.capacity : session.templateCapacity,
+      attendanceSaved: attendanceCount.n > 0,
     },
     roster: roster.map((r) => ({ ...r, status: r.status || 'absent', going: goingIds.has(r.id) })),
   });

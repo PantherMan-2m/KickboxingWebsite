@@ -100,22 +100,31 @@
       return;
     }
 
+    // Pre-fill present from the RSVP list only for a session that's never been saved and
+    // was created from a template (one-off sessions have no RSVPs to pre-fill from).
+    // Reopening a saved session must show exactly what was last saved -- saved state
+    // always beats the RSVP pre-fill, never the other way around.
+    const usePrefill = !data.session.attendanceSaved && !!data.session.templateId;
+
     rosterContainer.innerHTML = `
       <div class="scroll-x">
       <table class="schedule">
         <thead><tr><th>Name</th><th>RSVP</th><th>Present</th><th>Absent</th><th>Excused</th></tr></thead>
         <tbody>
-          ${data.roster.map((s) => `
+          ${data.roster.map((s) => {
+            const effectiveStatus = usePrefill ? (s.going ? 'present' : 'absent') : s.status;
+            return `
             <tr data-user-id="${s.id}">
               <td>${escapeHtml(s.name)}</td>
               <td>${s.going ? '✓ Going' : ''}</td>
               ${statuses.map((st) => `
                 <td style="text-align:center">
-                  <input type="radio" name="status-${s.id}" value="${st}" ${s.status === st ? 'checked' : ''} />
+                  <input type="radio" name="status-${s.id}" value="${st}" ${effectiveStatus === st ? 'checked' : ''} />
                 </td>
               `).join('')}
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
         </tbody>
       </table>
       </div>
