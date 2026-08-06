@@ -107,6 +107,14 @@ functions/
   a sibling field, `attendanceSaved` (`COUNT(*) FROM attendance WHERE session_id = ?` > 0), so
   the client *can* now tell a never-saved session from one saved all-absent, without changing
   what `status` itself means.
+- **Every `session_rsvps` count is unfiltered, because today every row means "going"**
+  (grepped 2026-08-07, complete): `student/rsvp.js:82` (the atomic insert's inner `COUNT(*)`),
+  `student/upcoming.js:28` (grouped counts → `attending`/`full`), `coach/next-class.js:30`
+  (the dashboard panel), `coach/sessions/[id].js:43` (T2.5 attendance pre-fill). The moment
+  any row means something other than "going" — Phase 3's waitlist is the first — **all four
+  must filter in the same commit** or a waitlisted student silently consumes a capacity slot,
+  inflates the headcount, and arrives pre-marked present. Non-counting status-sensitive sites:
+  `rsvp.js:46`, `:93` (existence checks), `:104` (the cancel DELETE).
 - **`session_rsvps` is keyed `(template_id, session_date, user_id)`**, not to a `class_sessions`
   row — students RSVP before a session exists. One-off sessions (`template_id IS NULL`) can never
   have RSVPs, and therefore can never be capacity-limited either.

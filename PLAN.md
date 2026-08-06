@@ -205,8 +205,8 @@ over-specifying them now guarantees rework.
 |---|---|---|---|
 | **0** | Foundation: Node 24/Wrangler 4, migration tracking, backups, local test environment, rollback tag | — | `plan/phase-0.md` — done, merged |
 | **1** | Shared `app.js` + navigation fixes across every page | 0 | `plan/phase-1.md` — done, merged, live-verified |
-| **2** | Class capacity + RSVP enforcement, next-class headcount panel, attendance pre-fill from RSVP, roster search | 0, 1 | `plan/phase-2.md` — specified, not started |
-| **3** | Waitlist + coach notification hook (email + optional webhook) | 2 | `plan/phase-3.md` — mapped only |
+| **2** | Class capacity + RSVP enforcement, next-class headcount panel, attendance pre-fill from RSVP, roster search | 0, 1 | `plan/phase-2.md` — done, merged, live-verified |
+| **3** | Waitlist + coach notification hook (email + optional webhook) | 2 | `plan/phase-3.md` — **specified 2026-08-07, ready to execute** |
 | **4** | Membership plans, payment recording, overdue flag on the attendance roster | 0, 1 | `plan/phase-4.md` — mapped only |
 | **5** | Attendance intelligence: over-limit flags, dormant-student alerts, basic reporting | 2, 4 | `plan/phase-5.md` — mapped only |
 | **6** | Progress notes, skill/competency grid, discipline tags | 1 | `plan/phase-6.md` — mapped only |
@@ -223,9 +223,11 @@ over-specifying them now guarantees rework.
 Not blocking Phases 0–2; must be answered before the phase named. Full context in each phase's
 `plan/phase-N.md`.
 
-1. **Phase 3** — should the coach be notified when a class merely *reaches* capacity, or only
-   when someone actually joins the waitlist? Current assumption: waitlist join only, since
-   that's the actionable signal.
+1. ~~**Phase 3** — notify on reaching capacity, or only on a waitlist join?~~ **Spec'd
+   2026-08-07** as waitlist-join-only (`plan/phase-3.md`, decision D1), along with two further
+   decisions raised at the checkpoint and not answered: capacity raises auto-promote (D2), and
+   waitlisted students see their queue position (D3). All three are defaults, isolated to one
+   place each, and cheap to flip — but flip them **before** T3.2, not after.
 2. **Phase 4** — what happens to an overdue member's RSVP? Current assumption: nothing, flag
    only, consistent with the over-limit decision.
 3. **Phase 6** — who defines the skill taxonomy, and is it editable in the UI or seeded in a
