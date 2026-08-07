@@ -1,6 +1,7 @@
 import { jsonResponse } from '../../_utils/auth.js';
 import { parseJsonBody } from '../../_utils/body.js';
 import { parseCapacity } from '../../_utils/capacity.js';
+import { promoteAndNotify } from '../../_utils/waitlist.js';
 
 export async function onRequestGet(context) {
   const { id } = context.params;
@@ -94,12 +95,24 @@ export async function onRequestPatch(context) {
     return jsonResponse({ ok: false, error: capacityResult.error }, { status: 400 });
   }
 
-  const result = await context.env.DB.prepare('UPDATE class_sessions SET capacity = ? WHERE id = ?')
+  // RETURNING the row's template_id/session_date in the same statement (fact 6)
+  // avoids a second SELECT to learn what to promote against -- a one-off
+  // session (template_id NULL) has no RSVPs to promote (fact 4).
+  const updated = await context.env.DB.prepare(
+    'UPDATE class_sessions SET capacity = ? WHERE id = ? RETURNING template_id, session_date'
+  )
     .bind(capacityResult.capacity, id)
-    .run();
+    .first();
 
-  if (result.meta.changes === 0) {
+  if (!updated) {
     return jsonResponse({ ok: false, error: 'Session not found' }, { status: 404 });
+  }
+
+  // T3.5 (D2): affects exactly this one date (unlike a template capacity
+  // change). Safe to call unconditionally on any successful write, including a
+  // lowered or unchanged capacity -- see the matching note in templates/[id].js.
+  if (updated.template_id) {
+    await promoteAndNotify(context, updated.template_id, updated.session_date);
   }
 
   return jsonResponse({ ok: true });

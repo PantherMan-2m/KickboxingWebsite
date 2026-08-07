@@ -1,6 +1,8 @@
 import { jsonResponse } from '../../_utils/auth.js';
 import { parseJsonBody } from '../../_utils/body.js';
 import { parseCapacity } from '../../_utils/capacity.js';
+import { promoteAndNotify } from '../../_utils/waitlist.js';
+import { todayIso, addDaysIso, RSVP_WINDOW_DAYS } from '../../_utils/dates.js';
 
 // Partial update: apply `active` and/or `capacity` when present in the body, reject a
 // body containing neither. Distinguishing "field absent" (don't touch) from "field
@@ -50,6 +52,27 @@ export async function onRequestPatch(context) {
 
   if (result.meta.changes === 0) {
     return jsonResponse({ ok: false, error: 'Template not found' }, { status: 404 });
+  }
+
+  // T3.5 (D2): a capacity change on a template affects every future date it
+  // expands to, not one date -- bounded to today through the RSVP window, and
+  // only dates that actually have a waitlisted row, found with one grouped
+  // query rather than a loop over every date in the window. Lowering capacity
+  // (or leaving it unchanged) is safe to run through the same call:
+  // promoteWaitlist's free-spot count is computed from the live going count,
+  // so it promotes zero when there's nothing to promote into.
+  if (hasCapacity) {
+    const start = todayIso();
+    const end = addDaysIso(start, RSVP_WINDOW_DAYS - 1);
+    const { results: dates } = await context.env.DB.prepare(
+      `SELECT DISTINCT session_date FROM session_rsvps
+       WHERE template_id = ? AND status = 'waitlisted' AND session_date BETWEEN ? AND ?`
+    )
+      .bind(id, start, end)
+      .all();
+    for (const row of dates) {
+      await promoteAndNotify(context, id, row.session_date);
+    }
   }
 
   return jsonResponse({ ok: true });
