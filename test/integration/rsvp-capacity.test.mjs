@@ -99,6 +99,16 @@ function rsvpStatus(templateId, date, userId) {
   return rows.length ? rows[0].status : null;
 }
 
+// Inserts a waitlisted row directly, bypassing rsvp.js entirely -- used to reach the
+// state "going < capacity AND waitlisted > 0", which the real API can never produce
+// (promoteAndNotify closes that window on every write path). Needed by the review-fix
+// test below, which exists specifically to prove the inner COUNT's status='going'
+// filter is load-bearing in exactly that state.
+function insertWaitlistedRow(templateId, date, userId) {
+  const sql = `INSERT INTO session_rsvps (template_id, session_date, user_id, status) VALUES ('${templateId}', '${date}', '${userId}', 'waitlisted')`;
+  runWrangler(['d1', 'execute', databaseName, '--local', `--command=${sql}`], { stdio: 'ignore' });
+}
+
 // T3.2: a full class waitlists a new RSVP instead of rejecting it with 409, and
 // cancelling a going RSVP auto-promotes the oldest waitlisted student -- both
 // replace this test's pre-Phase-3 behaviour (previously: reject, then require
@@ -256,4 +266,46 @@ test('a genuinely full class waitlists rather than rejecting, even after the ON 
   assert.equal(r2body.status, 'waitlisted');
   assert.equal(r2body.position, 1);
   assert.equal(countRsvpRows(template.id, date), 2, 'one going row plus one waitlisted row');
+});
+
+// Review fix 1: the atomic insert's inner COUNT (rsvp.js) filters `status = 'going'`,
+// but no prior test could tell that filter apart from an unfiltered COUNT(*) -- every
+// existing waitlisted row was created only after the class was already full, a state
+// where the filtered and unfiltered counts agree. The filter is only load-bearing in
+// "going < capacity AND waitlisted > 0", which the real API can never produce on its
+// own (promoteAndNotify always closes that window) -- so this test seeds it directly.
+test('the atomic insert only counts going rows -- a waitlisted row already present must not consume a free spot', async () => {
+  const createRes = await fetch(BASE_URL + '/api/coach/templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: coachCookie },
+    body: JSON.stringify({ dayOfWeek: 0, startTime: '19:00', name: 'Filter-regression test class', capacity: 2 }),
+  });
+  assert.equal(createRes.status, 200);
+  const { template } = await createRes.json();
+  const date = dateForDowInWindow(0); // Sunday -- unclaimed by any other test in this file
+
+  const { cookie: c1 } = await login('active1@seed.test', 'StudentPass123!');
+  const { cookie: c2 } = await login('active2@seed.test', 'StudentPass123!');
+
+  // going=1, capacity=2 -- one spot free.
+  const r1 = await rsvp(c1, template.id, date, true);
+  assert.equal(r1.status, 200);
+  assert.equal((await r1.json()).status, 'going');
+
+  // Seed a waitlisted row directly, bypassing the API -- reachable state:
+  // going=1 < capacity=2, waitlisted=1.
+  insertWaitlistedRow(template.id, date, 'rsvp-test-student-3');
+  assert.equal(rsvpStatus(template.id, date, 'rsvp-test-student-3'), 'waitlisted');
+
+  // A second student RSVPing must land in the one genuinely free spot. An unfiltered
+  // COUNT(*) would see going(1) + waitlisted(1) = 2, which is not < capacity(2), and
+  // wrongly waitlist this student instead.
+  const r2 = await rsvp(c2, template.id, date, true);
+  assert.equal(r2.status, 200);
+  const r2body = await r2.json();
+  assert.equal(
+    r2body.status,
+    'going',
+    `expected the free spot to be granted (status 'going'), got '${r2body.status}' -- the atomic insert's COUNT is not filtering on status='going'`
+  );
 });
