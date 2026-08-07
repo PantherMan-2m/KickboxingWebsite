@@ -98,7 +98,7 @@ functions/
 | `api/coach/mark-attendance.js` | POST | writes a row for the **whole** roster, not just those present (deliberate); still no `parseJsonBody` (bucket 2, unfixed) |
 | `api/coach/next-class.js` | **GET (T2.4, new)** | `{nextClass: null \| {...}}`, the coach-dashboard headcount panel |
 | `api/student/attendance.js` · `upcoming.js` | GET | `upcoming.js` rows now include `capacity`, `attending`, `full` (T2.3) |
-| `api/student/rsvp.js` | POST | T2.0: refactored onto shared `parseJsonBody`. T2.3: capacity-enforced on `going:true` -- atomic `INSERT...SELECT...WHERE COUNT<capacity ON CONFLICT DO NOTHING`, **409** `{ok:false,error:'This class is full'}` when it doesn't fit |
+| `api/student/rsvp.js` | POST | T2.0: refactored onto shared `parseJsonBody`. T2.3: capacity-enforced on `going:true` -- atomic `INSERT...SELECT...WHERE COUNT(status='going')<capacity ON CONFLICT DO NOTHING`. **T3.2: the old 409 is gone.** A full class waitlists instead of rejecting -- `{ok:true, status:'going'\|'waitlisted', position?}`. Cancelling (`going:false`) is `DELETE...RETURNING status`; a `going` row freed calls `promoteWaitlist` (T3.1), a `waitlisted` row does not. |
 
 ## Non-obvious behaviours that have already cost a session
 

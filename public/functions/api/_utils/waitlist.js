@@ -58,3 +58,28 @@ export async function promoteWaitlist(db, templateId, date) {
     .all();
   return results.map((r) => r.user_id);
 }
+
+// 1-indexed position in the queue (D3: shown position, not total queue length).
+// Same created_at/user_id ordering promoteWaitlist uses, so "#1 in line" is
+// always the next one promoteWaitlist would promote. Returns null if the user
+// has no waitlisted row for this template+date.
+export async function waitlistPosition(db, templateId, date, userId) {
+  const target = await db
+    .prepare(
+      `SELECT created_at FROM session_rsvps
+       WHERE template_id = ? AND session_date = ? AND user_id = ? AND status = 'waitlisted'`
+    )
+    .bind(templateId, date, userId)
+    .first();
+  if (!target) return null;
+
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM session_rsvps
+       WHERE template_id = ? AND session_date = ? AND status = 'waitlisted'
+         AND (created_at < ? OR (created_at = ? AND user_id <= ?))`
+    )
+    .bind(templateId, date, target.created_at, target.created_at, userId)
+    .first();
+  return row.n;
+}
