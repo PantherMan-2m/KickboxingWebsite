@@ -1,6 +1,6 @@
-// T3.3: coach notifications for waitlist events (D1: waitlist join only, no
-// class_full event). Two exports, split so the interesting half (buildEvent) is
-// testable without any network access.
+// T3.3: coach (and, for waitlist_promoted, student) notifications for waitlist
+// events (D1: waitlist join only, no class_full event). buildEvent is split out
+// as the pure, network-free half so it's testable in isolation.
 import { sendEmail } from './email.js';
 
 const EVENT_TOPICS = {
@@ -38,16 +38,12 @@ export function buildEvent(type, payload) {
 // try/catch so a Resend outage or an unreachable webhook endpoint is silently
 // swallowed, never thrown back at the caller.
 export function notifyCoach(env, ctx, event) {
-  ctx.waitUntil(dispatch(env, event));
+  ctx.waitUntil(dispatchToCoach(env, event));
 }
 
-async function dispatch(env, event) {
+async function dispatchToCoach(env, event) {
   if (env.COACH_NOTIFY_EMAIL && env.RESEND_API_KEY) {
-    try {
-      await sendEmail(env, { to: env.COACH_NOTIFY_EMAIL, subject: event.subject, text: event.text });
-    } catch {
-      // Swallowed deliberately -- see the module comment above.
-    }
+    await sendEmailSafely(env, env.COACH_NOTIFY_EMAIL, event);
   }
   if (env.COACH_WEBHOOK_URL) {
     try {
@@ -62,5 +58,22 @@ async function dispatch(env, event) {
     } catch {
       // Swallowed deliberately -- see the module comment above.
     }
+  }
+}
+
+// waitlist_promoted (T3.4) goes to the promoted student directly, not just the
+// coach -- `to` is the student's own address from the users table, not an env
+// var. Gated on RESEND_API_KEY alone (no COACH_NOTIFY_EMAIL involved): there's
+// no coach-webhook equivalent for a student notification.
+export function notifyStudent(env, ctx, to, event) {
+  if (!env.RESEND_API_KEY) return;
+  ctx.waitUntil(sendEmailSafely(env, to, event));
+}
+
+async function sendEmailSafely(env, to, event) {
+  try {
+    await sendEmail(env, { to, subject: event.subject, text: event.text });
+  } catch {
+    // Swallowed deliberately -- see the module comment above.
   }
 }

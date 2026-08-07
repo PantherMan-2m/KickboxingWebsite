@@ -1,7 +1,8 @@
 import { jsonResponse } from '../_utils/auth.js';
 import { parseJsonBody } from '../_utils/body.js';
-import { isValidDate, todayIso, addDaysIso, dayOfWeekFor, RSVP_WINDOW_DAYS } from '../_utils/dates.js';
-import { promoteWaitlist, waitlistPosition } from '../_utils/waitlist.js';
+import { isValidDate, todayIso, addDaysIso, dayOfWeekFor, dayLabelFor, RSVP_WINDOW_DAYS } from '../_utils/dates.js';
+import { promoteAndNotify, waitlistPosition, waitlistCount } from '../_utils/waitlist.js';
+import { buildEvent, notifyCoach } from '../_utils/notify.js';
 
 export async function onRequestPost(context) {
   const parsed = await parseJsonBody(context);
@@ -30,7 +31,7 @@ export async function onRequestPost(context) {
     }
 
     const template = await context.env.DB.prepare(
-      'SELECT id, day_of_week, capacity FROM class_templates WHERE id = ? AND active = 1'
+      'SELECT id, day_of_week, capacity, name, start_time FROM class_templates WHERE id = ? AND active = 1'
     )
       .bind(templateId)
       .first();
@@ -101,16 +102,31 @@ export async function onRequestPost(context) {
       // handled the same way below: try to waitlist (itself a no-op if the row already
       // exists, via the same ON CONFLICT DO NOTHING), then read back this user's own
       // row to answer from -- which tells the two cases apart without needing to.
-      await context.env.DB.prepare(
+      const waitlistInsert = await context.env.DB.prepare(
         `INSERT INTO session_rsvps (template_id, session_date, user_id, status) VALUES (?, ?, ?, 'waitlisted')
          ON CONFLICT (template_id, session_date, user_id) DO NOTHING`
       )
         .bind(templateId, date, context.data.user.id)
         .run();
 
+      // changes===1 means a genuinely new waitlisted row was created (not a
+      // double-submit no-op) -- fire waitlist_joined exactly once for it, per D1.
+      if (waitlistInsert.meta.changes === 1) {
+        const queueLength = await waitlistCount(context.env.DB, templateId, date);
+        const event = buildEvent('waitlist_joined', {
+          className: template.name,
+          dayLabel: dayLabelFor(date),
+          time: template.start_time,
+          date,
+          studentName: context.data.user.name,
+          queueLength,
+        });
+        notifyCoach(context.env, context, event);
+      }
+
       // Closes the window where a spot opened between the failed going-insert and
       // the waitlist insert just above -- normally promotes nobody.
-      await promoteWaitlist(context.env.DB, templateId, date);
+      await promoteAndNotify(context, templateId, date);
 
       const finalRow = await context.env.DB.prepare(
         'SELECT status FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?'
@@ -137,7 +153,7 @@ export async function onRequestPost(context) {
     .bind(templateId, date, context.data.user.id)
     .first();
   if (deleted && deleted.status === 'going') {
-    await promoteWaitlist(context.env.DB, templateId, date);
+    await promoteAndNotify(context, templateId, date);
   }
 
   return jsonResponse({ ok: true });

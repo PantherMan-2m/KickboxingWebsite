@@ -8,6 +8,8 @@
 // first could both see the same one free spot and both promote into it. This
 // never demotes a `going` row back to `waitlisted`: it only ever sets
 // `waitlisted` rows to `going`.
+import { buildEvent, notifyCoach, notifyStudent } from './notify.js';
+import { dayLabelFor } from './dates.js';
 
 // COALESCE(class_sessions.capacity, class_templates.capacity) for this
 // template+date -- the same effective-capacity rule T2.2/T2.3 use everywhere
@@ -82,4 +84,49 @@ export async function waitlistPosition(db, templateId, date, userId) {
     .bind(templateId, date, target.created_at, target.created_at, userId)
     .first();
   return row.n;
+}
+
+// Total number of students currently waitlisted (D3: distinct from a single
+// student's position) -- also doubles as "resulting queue length" for a
+// waitlist_joined event, since a newly-joined row is not guaranteed to land
+// last in a same-second tie, so it isn't safe to reuse waitlistPosition() for
+// that number.
+export async function waitlistCount(db, templateId, date) {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM session_rsvps WHERE template_id = ? AND session_date = ? AND status = 'waitlisted'`)
+    .bind(templateId, date)
+    .first();
+  return row.n;
+}
+
+// T3.4: promotes (T3.1's promoteWaitlist), then fires one waitlist_promoted
+// event per promoted student -- to that student directly and to the coach.
+// Every write path that can free or add a spot (RSVP cancel, T3.5's capacity
+// raise) calls this rather than promoteWaitlist directly, so the notification
+// never gets forgotten at a new call site. Returns the promoted user_ids, same
+// as promoteWaitlist, so a caller can still branch on whether promotion
+// happened (e.g. rsvp.js re-checking its own status).
+export async function promoteAndNotify(context, templateId, date) {
+  const promotedUserIds = await promoteWaitlist(context.env.DB, templateId, date);
+  if (promotedUserIds.length === 0) return promotedUserIds;
+
+  const template = await context.env.DB.prepare('SELECT name, start_time FROM class_templates WHERE id = ?')
+    .bind(templateId)
+    .first();
+  const dayLabel = dayLabelFor(date);
+
+  for (const userId of promotedUserIds) {
+    const user = await context.env.DB.prepare('SELECT name, email FROM users WHERE id = ?').bind(userId).first();
+    const event = buildEvent('waitlist_promoted', {
+      className: template.name,
+      dayLabel,
+      time: template.start_time,
+      date,
+      studentName: user.name,
+      studentEmail: user.email,
+    });
+    notifyCoach(context.env, context, event);
+    notifyStudent(context.env, context, user.email, event);
+  }
+  return promotedUserIds;
 }
