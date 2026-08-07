@@ -41,14 +41,18 @@ each decision's note in `plan/phase-3.md` for what changes).
 
 ## What's still open (blocks calling Phase 3 fully done)
 
-1. **T3.8, the `[HUMAN GATE]` env-var configuration, is not confirmed done.**
-   `COACH_NOTIFY_EMAIL=info@cjnacademy.com` was presented to Giovanni with exact
-   dashboard steps; he has not yet confirmed setting it. Until he does, and gives the
-   go-ahead for one live end-to-end waitlist-join email test against production, the
-   notification feature has **zero live verification** — everything is tested against a
-   local no-op path (deliberately, per the "no test may send real email" rule) plus code
-   review. This is the single biggest gap between "tests pass" and "actually works in
-   production."
+1. **T3.8's env var is now set** (`COACH_NOTIFY_EMAIL=info@cjnacademy.com`, confirmed
+   present alongside the pre-existing `RESEND_API_KEY` via `wrangler pages secret list`)
+   — done via `wrangler pages secret put` at Giovanni's explicit request, after the
+   Cloudflare dashboard's plaintext Variables UI turned out to be disabled for this
+   project ("managed through wrangler.toml"). **The live end-to-end email test is still
+   outstanding** — that's a real write against production and needs Giovanni's separate
+   go-ahead, plus it's untested whether the already-deployed production build picks up a
+   secret set after deployment or needs a fresh deploy to see it. Until that test runs,
+   the notification feature has **zero live verification** — everything so far is tested
+   against a local no-op path (deliberately, per the "no test may send real email" rule)
+   plus code review. This is the single biggest gap between "tests pass" and "actually
+   works in production."
 2. **Migration `0004` is not applied to production.** Needs a fresh backup + Giovanni's
    confirmation per T0.3, naturally sequenced after T3.8's env vars (no point testing
    against production before there's a notification destination configured). The

@@ -208,27 +208,43 @@ Full suite: **110/110**.
 
 ## T3.8 — Configure notification env vars `[HUMAN GATE]`
 
-**Status: not fully closed.** This task is Giovanni's action in the Cloudflare
-dashboard, presented but not yet confirmed as of this report:
+**Status: env var set, live email test not yet done.** Giovanni confirmed the value
+(`info@cjnacademy.com`) and explicitly asked me to set it directly, since the Cloudflare
+dashboard's plaintext Variables UI was disabled for this project ("managed through
+wrangler.toml" — the project uses `pages_build_output_dir`, which Cloudflare treats as
+config-as-source-of-truth for that UI, though not for the D1 binding, which is still
+dashboard-managed per Phase 0's finding). Worked around it with the CLI, which operates
+via the API directly and isn't subject to that UI restriction:
 
-- `COACH_NOTIFY_EMAIL=info@cjnacademy.com` (confirmed value, per Giovanni), plus
-  optionally `COACH_WEBHOOK_URL`/`COACH_WEBHOOK_SECRET` — **to be set by Giovanni** in
-  Cloudflare Pages → Settings → Environment variables (Production). Not yet confirmed
-  done.
+- Found the actual Cloudflare Pages project name first (`wrangler pages project list` →
+  `kickboxingwebsite` — **not** `cjn-academy-website`, the local `wrangler.jsonc` "name"
+  field, which turned out to be unrelated to the real Pages project identifier).
+- `printf '%s' "info@cjnacademy.com" | wrangler pages secret put COACH_NOTIFY_EMAIL
+  --project-name=kickboxingwebsite` → `✨ Success! Uploaded secret COACH_NOTIFY_EMAIL`
+  (production environment).
+- `wrangler pages secret list --project-name=kickboxingwebsite` confirmed both
+  `COACH_NOTIFY_EMAIL` and the pre-existing `RESEND_API_KEY` present (both needed for
+  the email dispatch path — `notify.js` gates on `COACH_NOTIFY_EMAIL && RESEND_API_KEY`
+  together).
+- `COACH_WEBHOOK_URL`/`COACH_WEBHOOK_SECRET` left unset (email-only for now, per
+  Giovanni).
 - `public/.dev.vars` created locally with all three names left empty (gitignored — it
   wasn't in `.gitignore` before this, added in the same commit). Full suite re-run with
   the file present: **110/110**, confirming the empty values still take the no-op path
-  (`Using secrets defined in .dev.vars` appeared in wrangler's own output, and behaviour
-  was unchanged).
-- **Not done**: the one real end-to-end waitlist join on production producing one email.
-  This requires the dashboard variable to be set first, then Giovanni's explicit
-  go-ahead to trigger a live write against production (per `PLAN.md` rule 4/5) — neither
-  has happened yet.
+  locally (`Using secrets defined in .dev.vars` appeared in wrangler's own output,
+  behaviour unchanged).
 
-Migration `0004` is **not yet applied to production** either — that also needs a fresh
-backup and Giovanni's confirmation per T0.3, and hasn't been requested yet since T3.8's
-dashboard step comes first in the natural order (env vars configured before there's
-anything to test against).
+**Still not done**: the one real end-to-end waitlist join on production producing one
+email with the expected subject. `wrangler pages secret put` is a live production write
+via the Cloudflare API — set with Giovanni's explicit request, but the live-email
+trigger itself (a real write against production) still needs his separate go-ahead per
+`PLAN.md` rule 4/5, and it's unclear without testing whether the currently-deployed
+production build picks up a secret set after it was deployed, or needs a fresh
+deployment to see it — worth checking before assuming the test will just work.
+
+Migration `0004` is **not yet applied to production** — that needs a fresh backup and
+Giovanni's confirmation per T0.3, separate from the env var write above (a schema change
+carries different risk than a secret value).
 
 ---
 
