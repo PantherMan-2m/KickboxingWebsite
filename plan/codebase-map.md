@@ -1,9 +1,10 @@
 # Codebase Map
 
 Findings get recorded here as data, not re-derived each session — per `PLAN.md`'s "Keeping
-sessions cheap" rule. Verified against the code on 2026-08-07, after Phase 2 merged to
-`main` (`ac9d39f`, migration `0003` applied to production). Update this file when the
-codebase's shape changes; do not let a session re-grep for it.
+sessions cheap" rule. Verified against the code on 2026-08-07, after Phase 3 (waitlist +
+coach notifications) landed on `phase-3-waitlist`, migration `0004` applied locally (not
+yet to production — see T3.8 in `plan/phase-3.md`). Update this file when the codebase's
+shape changes; do not let a session re-grep for it.
 
 ## Page inventory (12 HTML pages, `public/`)
 
@@ -17,14 +18,14 @@ each page's own trailing inline `<script>`, at the end of `<body>` — see
 | `login.html` | logo-only | login form submit |
 | `change-password.html` | logo-only | change-password form submit |
 | `request-account.html` | logo-only | request-account form submit |
-| `coach/dashboard.html` | full nav (coach) | Phase 2 T2.4: next-class panel (`GET /api/coach/next-class`) |
+| `coach/dashboard.html` | full nav (coach) | Phase 2 T2.4: next-class panel (`GET /api/coach/next-class`), now with a waitlist count (T3.7) |
 | `coach/attendance.html` | full nav (coach) | date picker (now `sastTodayIso()`-based), template suggestions, one-off session form |
 | `coach/requests.html` | full nav (coach) | pending-request list, approve/reject |
-| `coach/session.html` | full nav (coach) | roster load/save with RSVP pre-fill (T2.5), capacity-override form (T2.2), back-link to attendance with date |
+| `coach/session.html` | full nav (coach) | roster load/save with RSVP pre-fill (T2.5), capacity-override form (T2.2), back-link to attendance with date, separate waitlist list below the roster (T3.7) |
 | `coach/students.html` | full nav (coach) | roster list, add student, activate/deactivate, search + status filter (T2.6) |
 | `coach/templates.html` | full nav (coach) | weekly-schedule list + capacity field (T2.2), add template |
 | `student/dashboard.html` | full nav (student) | attendance history load |
-| `student/upcoming.html` | full nav (student) | upcoming-classes list, RSVP toggle, spots-remaining/"Full" state (T2.3) |
+| `student/upcoming.html` | full nav (student) | upcoming-classes list, three-state RSVP button: not booked / going / waitlisted-with-position (T2.3 capacity, T3.6 waitlist) |
 
 "Logo-only" header pages have no `.menu-toggle`, `.nav-links`, or `#logoutLink` — every
 DOM lookup in `app.js` guards against their absence.
@@ -54,11 +55,13 @@ functions/
 ├── api/
 │   ├── _utils/
 │   │   ├── auth.js                 # hashing, sessions, cookies, getSessionUser, jsonResponse
-│   │   ├── dates.js                # isValidDate, dayOfWeekFor, todayIso, addDaysIso, RSVP_WINDOW_DAYS, sastNowParts (T2.4)
+│   │   ├── dates.js                # isValidDate, dayOfWeekFor, todayIso, addDaysIso, RSVP_WINDOW_DAYS, sastNowParts (T2.4), dayLabelFor (T3.4)
 │   │   ├── email.js                # Resend wrapper
 │   │   ├── body.js                 # T2.0: parseJsonBody(context)
 │   │   ├── capacity.js             # T2.2: parseCapacity(value)
-│   │   └── schedule.js             # T2.4: expandTemplates(), selectNextClass()
+│   │   ├── schedule.js             # T2.4: expandTemplates(), selectNextClass()
+│   │   ├── waitlist.js             # T3.1/T3.4: promoteWaitlist(), waitlistPosition(), waitlistCount(), promoteAndNotify()
+│   │   └── notify.js               # T3.3: buildEvent(), notifyCoach(), notifyStudent()
 │   ├── auth/                       # no middleware -- public by construction
 │   │   ├── login.js
 │   │   ├── logout.js
@@ -80,7 +83,7 @@ functions/
 │       └── rsvp.js
 ```
 
-## HTTP verb inventory (grepped 2026-08-07, complete, post-Phase-2)
+## HTTP verb inventory (grepped 2026-08-07, complete, post-Phase-3)
 
 | Route file | Verbs | Notes worth knowing before you edit it |
 |---|---|---|
@@ -92,13 +95,14 @@ functions/
 | `api/coach/requests.js` | GET | |
 | `api/coach/requests/[id].js` | PATCH | still no `parseJsonBody` (bucket 2, unfixed) |
 | `api/coach/templates.js` | GET, POST | T2.0/T2.2: `parseJsonBody`; GET/POST include `capacity` (optional, `parseCapacity`-validated) |
-| `api/coach/templates/[id].js` | PATCH | T2.2: **partial update** -- `{active}` and/or `{capacity}`, at least one required (no longer a hard boolean-`active` requirement) |
+| `api/coach/templates/[id].js` | PATCH | T2.2: **partial update** -- `{active}` and/or `{capacity}`, at least one required (no longer a hard boolean-`active` requirement). T3.5: on a capacity change, calls `promoteAndNotify` for every future date (today..`RSVP_WINDOW_DAYS`) that has a waitlisted row (one grouped `DISTINCT` query, not a loop) -- a template capacity change affects every date it expands to. |
 | `api/coach/sessions.js` | GET, POST | T2.0: `parseJsonBody`. GET returns `templatesForDay` + `sessions` for one date, both now include `capacity`. POST from a template does **not** copy capacity onto the session row. |
-| `api/coach/sessions/[id].js` | GET, **PATCH (T2.2, new)** | GET adds `capacity`, `effectiveCapacity`, `attendanceSaved` (T2.5). PATCH (`parseJsonBody`-guarded) is the per-session capacity override, `{capacity}` only. |
+| `api/coach/sessions/[id].js` | GET, **PATCH (T2.2, new)** | GET adds `capacity`, `effectiveCapacity`, `attendanceSaved` (T2.5), and (T3.7) a separate `waitlist` array (queue order). PATCH (`parseJsonBody`-guarded) is the per-session capacity override, `{capacity}` only; T3.5: `UPDATE...RETURNING template_id, session_date` then calls `promoteAndNotify` for that one date. |
 | `api/coach/mark-attendance.js` | POST | writes a row for the **whole** roster, not just those present (deliberate); still no `parseJsonBody` (bucket 2, unfixed) |
-| `api/coach/next-class.js` | **GET (T2.4, new)** | `{nextClass: null \| {...}}`, the coach-dashboard headcount panel |
-| `api/student/attendance.js` · `upcoming.js` | GET | `upcoming.js` rows now include `capacity`, `attending`, `full` (T2.3) |
-| `api/student/rsvp.js` | POST | T2.0: refactored onto shared `parseJsonBody`. T2.3: capacity-enforced on `going:true` -- atomic `INSERT...SELECT...WHERE COUNT(status='going')<capacity ON CONFLICT DO NOTHING`. **T3.2: the old 409 is gone.** A full class waitlists instead of rejecting -- `{ok:true, status:'going'\|'waitlisted', position?}`. Cancelling (`going:false`) is `DELETE...RETURNING status`; a `going` row freed calls `promoteWaitlist` (T3.1), a `waitlisted` row does not. |
+| `api/coach/next-class.js` | **GET (T2.4, new)** | `{nextClass: null \| {...}}`, the coach-dashboard headcount panel; T3.7 adds `waitlisted` (total count) |
+| `api/student/attendance.js` | GET | |
+| `api/student/upcoming.js` | GET | rows include `capacity`, `attending` (`status='going'` count), `full` (T2.3); T3.6: `rsvpStatus` (`null\|'going'\|'waitlisted'`) + `waitlistPosition`, and `going` now strictly means `rsvpStatus==='going'` (previously "has any row" -- a bug T3.0 deliberately left unfiltered and flagged for T3.6) |
+| `api/student/rsvp.js` | POST | T2.0: refactored onto shared `parseJsonBody`. T2.3: capacity-enforced on `going:true` -- atomic `INSERT...SELECT...WHERE COUNT(status='going')<capacity ON CONFLICT DO NOTHING`. **T3.2: the old 409 is gone.** A full class waitlists instead of rejecting -- `{ok:true, status:'going'\|'waitlisted', position?}`. Cancelling (`going:false`) is `DELETE...RETURNING status`; a `going` row freed calls `promoteAndNotify` (T3.1/T3.4), a `waitlisted` row does not. T3.4: a genuinely new waitlisted row (insert `changes===1`) fires one `waitlist_joined` to the coach. |
 
 ## Non-obvious behaviours that have already cost a session
 
@@ -107,14 +111,25 @@ functions/
   a sibling field, `attendanceSaved` (`COUNT(*) FROM attendance WHERE session_id = ?` > 0), so
   the client *can* now tell a never-saved session from one saved all-absent, without changing
   what `status` itself means.
-- **Every `session_rsvps` count is unfiltered, because today every row means "going"**
-  (grepped 2026-08-07, complete): `student/rsvp.js:82` (the atomic insert's inner `COUNT(*)`),
-  `student/upcoming.js:28` (grouped counts → `attending`/`full`), `coach/next-class.js:30`
-  (the dashboard panel), `coach/sessions/[id].js:43` (T2.5 attendance pre-fill). The moment
-  any row means something other than "going" — Phase 3's waitlist is the first — **all four
-  must filter in the same commit** or a waitlisted student silently consumes a capacity slot,
-  inflates the headcount, and arrives pre-marked present. Non-counting status-sensitive sites:
-  `rsvp.js:46`, `:93` (existence checks), `:104` (the cancel DELETE).
+- **T3.0: every `session_rsvps` count now filters `status = 'going'`** (fixed in the same
+  commit as the migration that added the column, per the rule below): `student/rsvp.js`'s
+  atomic insert's inner `COUNT(*)`, `student/upcoming.js`'s grouped counts →
+  `attending`/`full`, `coach/next-class.js`'s dashboard panel, `coach/sessions/[id].js`'s
+  T2.5 attendance pre-fill. **If you ever see an unfiltered `COUNT(*)`/`SELECT` against
+  this table reintroduced, it's a bug** -- a waitlisted row must never consume a capacity
+  slot, inflate a headcount, or arrive pre-marked present. Non-counting status-sensitive
+  sites, deliberately unfiltered (they need to find a row regardless of status, for logic
+  rather than counting): `rsvp.js`'s existing-row check and its ambiguous-`changes`
+  re-check, and the cancel `DELETE`. Grep to re-verify: `grep -rn "FROM session_rsvps"
+  public/functions` -- every hit either filters on `status` or is one of the three named
+  above.
+- **Promotion is centralized**: `_utils/waitlist.js`'s `promoteWaitlist()` is the only
+  place that decides who gets promoted (one atomic `UPDATE...WHERE user_id IN (SELECT...
+  ORDER BY created_at, user_id LIMIT...)`, so concurrent callers can't over-promote and a
+  `going` row is never demoted). `promoteAndNotify()` wraps it with the T3.4 notification.
+  Four call sites: `rsvp.js`'s cancel path, `rsvp.js`'s full-class join path (closes the
+  race window), and the two capacity-PATCH endpoints (T3.5). A new write path that can
+  free or add a spot must call `promoteAndNotify`, not reimplement the query.
 - **`session_rsvps` is keyed `(template_id, session_date, user_id)`**, not to a `class_sessions`
   row — students RSVP before a session exists. One-off sessions (`template_id IS NULL`) can never
   have RSVPs, and therefore can never be capacity-limited either.
@@ -149,13 +164,25 @@ functions/
 
 `public/migrations/` — `0001_initial.sql`, `0002_session_rsvps.sql`,
 `0003_class_capacity.sql` (adds nullable `capacity` to `class_templates` and
-`class_sessions`; applied to production 2026-08-07, preceded by a fresh backup per T0.3).
-Tracked via `migrations_dir` in `wrangler.jsonc`. Next number is `0004`.
+`class_sessions`; applied to production 2026-08-07, preceded by a fresh backup per T0.3),
+`0004_rsvp_status.sql` (adds `session_rsvps.status TEXT NOT NULL DEFAULT 'going'` + an
+index on `(template_id, session_date, status, created_at)`; applied **locally only** as
+of this writing -- production application is T3.8, a `[HUMAN GATE]`, blocked on
+Giovanni's confirmation). Tracked via `migrations_dir` in `wrangler.jsonc`. Next number
+is `0005`.
 
 ## Static asset versions (bump on every change, every referencing page — `PLAN.md` rule 6)
 
-`styles.css?v=4` · `app.js?v=2` (bumped in T2.4; all 12 pages). Check with
-`grep -rn "app\.js?v=" public`.
+`styles.css?v=4` · `app.js?v=2` (bumped in T2.4; all 12 pages, unchanged by Phase 3 --
+no CSS/app.js edits were needed). Check with `grep -rn "app\.js?v=" public`.
+
+## Notification env vars (T3.3/T3.8)
+
+`COACH_NOTIFY_EMAIL`, `COACH_WEBHOOK_URL`, `COACH_WEBHOOK_SECRET` -- read by
+`_utils/notify.js`, alongside the pre-existing `RESEND_API_KEY`. `public/.dev.vars`
+(gitignored, T3.8) holds the three new names **left empty** locally, so `npm run dev`
+and the test suite always exercise the no-op path. Production values live in the
+Cloudflare Pages dashboard (Settings → Environment variables), not in any tracked file.
 
 ## Database schema (6 tables)
 

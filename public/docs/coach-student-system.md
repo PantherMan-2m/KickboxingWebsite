@@ -1,10 +1,10 @@
 # Coach/Student Login & Attendance System — Usage Guide
 
-**Status**: self-signup + approval, class RSVPs, shared `app.js` + navigation fixes, and
-class capacity + RSVP enforcement (`PLAN.md`'s Phase 2) all complete and live as of
-2026-08-07 — see `HANDOVER.md` for current branch state. This is a living document —
-update it (don't replace it) as new features land. See `TODO.md` (outer folder) for
-what's not built yet.
+**Status**: self-signup + approval, class RSVPs, shared `app.js` + navigation fixes,
+class capacity + RSVP enforcement (`PLAN.md`'s Phase 2), and a waitlist + coach
+notifications (Phase 3) all complete as of 2026-08-07 — see `HANDOVER.md` for current
+branch state. This is a living document — update it (don't replace it) as new features
+land. See `TODO.md` (outer folder) for what's not built yet.
 
 This is the plain-English usage guide. For schema, endpoints, and security mechanics,
 see **`coach-student-system-technical.md`** in this same folder.
@@ -48,8 +48,9 @@ back, follow up with a coach directly.
 
 1. **Dashboard** (`/coach/dashboard.html`) — landing page with shortcuts to everything
    else, plus a **Next class** panel showing the soonest upcoming class (name, date,
-   time, and a live "N going" / "N / capacity going (M spots left)" headcount). Empty if
-   nothing's scheduled in the next 7 days.
+   time, and a live "N going" / "N / capacity going (M spots left)" headcount, plus
+   "· N waitlisted" once anyone's waiting). Empty if nothing's scheduled in the next 7
+   days.
 2. **Students** (`/coach/students.html`) — add a student (name + email). This creates
    their account with a random temporary password and emails it to them via Resend. If
    the email fails to send, the temporary password is shown on-screen instead so you can
@@ -86,7 +87,15 @@ back, follow up with a coach directly.
    writes the whole roster at once. Reopening an already-saved session shows exactly
    what you last saved, not the RSVP pre-fill again — so amending attendance after the
    fact is always safe. A back link at the top returns to Attendance with the same date
-   still selected.
+   still selected. If anyone's waitlisted for this date, a separate **Waitlisted**
+   list appears below the roster, in the order they joined — they're never pre-marked
+   present, since they don't have a confirmed spot (unless/until a spot frees up and
+   they're auto-promoted).
+7. **Raising a class's capacity** (Schedule or a session's own capacity override)
+   **auto-promotes** the oldest waitlisted student(s) into the newly-freed spot(s)
+   immediately — no separate action needed. Both the promoted student and you get an
+   email. Lowering capacity never removes anyone already going, even if that puts the
+   class over the new number.
 
 ## Student walkthrough
 
@@ -98,10 +107,15 @@ to cancel. This is a heads-up for the coach; it doesn't create or replace an act
 attendance record, and you're not locked out of a class you didn't RSVP to (or penalized
 for RSVPing and not showing).
 
-If a coach has set a capacity and the class fills up, the button shows **"Full"** and is
-disabled for anyone not already going — but if you RSVP'd before it filled, your
-"Going ✓ (tap to cancel)" button keeps working, so you're never stuck unable to cancel.
-Classes with no capacity set behave exactly as before (unlimited).
+If a coach has set a capacity and the class fills up, the button shows **"Join
+waitlist"** — tap it to join the queue. You'll see **"Waitlisted — #N in line (tap to
+leave)"**, showing your position (not the total number waiting). If a spot opens up
+(someone going cancels, or the coach raises capacity), the oldest waitlisted student is
+promoted to going automatically — you'll get an email, and the page will show you as
+going next time you load it. Leaving the waitlist (tapping the button again) just
+removes your place in line; it doesn't promote anyone else, since you weren't taking up
+a spot. Classes with no capacity set behave exactly as before (unlimited, always "I'm
+going").
 
 ## Bootstrapping a coach account
 

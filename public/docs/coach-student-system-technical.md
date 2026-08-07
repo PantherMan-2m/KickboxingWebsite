@@ -146,7 +146,7 @@ environment" above for why it spawns `wrangler` directly via `node <wrangler.js>
 ## Database schema
 
 Full DDL lives in `migrations/0001_initial.sql`, `migrations/0002_session_rsvps.sql`,
-and `migrations/0003_class_capacity.sql`. Six tables:
+`migrations/0003_class_capacity.sql`, and `migrations/0004_rsvp_status.sql`. Six tables:
 
 - **`users`** — coaches and students both live here, distinguished by `role` ('coach'/
   'student'). `status` ('active'/'inactive'/'pending' — 'pending' is a self-signup
@@ -180,16 +180,28 @@ and `migrations/0003_class_capacity.sql`. Six tables:
   roster when a coach saves (not just who was present) — this is what makes "did this
   student attend" and "reopen and amend" both simple queries instead of needing to infer
   absence from missing rows.
-- **`session_rsvps`** — a student's "going" intent for an upcoming occurrence of a
-  weekly class. Keyed to `(template_id, session_date, user_id)` rather than a
-  `class_sessions` row, because a session usually doesn't exist yet at RSVP time (the
-  coach creates it later via the Attendance page) — RSVPing is a pure read/write against
-  the template + date, no session gets silently created as a side effect. Row existence
-  = going; un-RSVPing deletes the row rather than tracking a "not going" state.
+- **`session_rsvps`** — a student's intent for an upcoming occurrence of a weekly class:
+  `status` (`0004`, `TEXT NOT NULL DEFAULT 'going'`, validated in application code, no
+  CHECK constraint) is `'going'` or `'waitlisted'` (Phase 3). Keyed to `(template_id,
+  session_date, user_id)` rather than a `class_sessions` row, because a session usually
+  doesn't exist yet at RSVP time (the coach creates it later via the Attendance page) —
+  RSVPing is a pure read/write against the template + date, no session gets silently
+  created as a side effect. Row existence = has an RSVP of *some* status; un-RSVPing
+  (from either status) deletes the row rather than tracking a "not going" state.
   Deliberately separate from `attendance`, since RSVP intent and actual attendance are
   different facts that can disagree (someone RSVPs then doesn't show, or shows without
   RSVPing). One-off sessions (`class_sessions.template_id IS NULL`) have no way to be
-  RSVP'd to.
+  RSVP'd to, and therefore can never have a waitlist either.
+
+  **Every count against this table must filter `status = 'going'`, or a waitlisted row
+  silently consumes a capacity slot, inflates a headcount, or arrives pre-marked present
+  on the attendance roster.** The four counting sites (`student/rsvp.js`'s atomic insert,
+  `student/upcoming.js`'s grouped counts, `coach/next-class.js`'s headcount,
+  `coach/sessions/[id].js`'s attendance pre-fill) all do. Three status-*aware-but-not-
+  counting* sites in `rsvp.js` (the existing-row check, the ambiguous-`changes`
+  re-check, the cancel DELETE) are deliberately unfiltered — they need to find a row
+  regardless of its status, for logic rather than counting. See "Waitlist and
+  notifications" below for the full behaviour.
 
 ## Auth mechanics
 
@@ -249,6 +261,31 @@ and `migrations/0003_class_capacity.sql`. Six tables:
   class starting on `today` only survives if `startTime >= nowTime`. Being pure is what
   makes the mid-week/later-today/week-rollover/00:30-SAST-boundary scenarios
   unit-testable without touching the real clock.
+- `functions/api/_utils/waitlist.js` (Phase 3) — `promoteWaitlist(db, templateId, date)`:
+  resolves effective capacity, then promotes the oldest waitlisted rows (`created_at`,
+  then `user_id` for a deterministic same-second tie-break) into whatever spots are
+  free, in one `UPDATE ... WHERE user_id IN (SELECT ... ORDER BY ... LIMIT ...)
+  RETURNING user_id` statement — the free-spot count is computed *inside* the statement,
+  the same discipline `rsvp.js`'s atomic insert uses, so concurrent callers can't
+  over-promote. Never demotes a `going` row. `waitlistPosition(db, templateId, date,
+  userId)` — 1-indexed queue position (D3: shown, not total queue length), same
+  ordering. `waitlistCount(db, templateId, date)` — total waitlisted count (the coach
+  panel's number, and a new join's "resulting queue length"). `promoteAndNotify(context,
+  templateId, date)` — wraps `promoteWaitlist` and fires one `waitlist_promoted` event
+  (to the student and the coach) per promoted student; every write path that can free or
+  add a spot calls this, not `promoteWaitlist` directly, so a new call site can't forget
+  the notification.
+- `functions/api/_utils/notify.js` (Phase 3) — `buildEvent(type, payload)`, pure:
+  returns `{type, subject, text, json}` — a stable bracketed subject
+  (`[CJN][WAITLIST_JOINED] Mon 18:00 Adults — 2026-08-10`) and a `key: value`-per-line
+  body (`json`'s own insertion order, `event` first), parseable by a naive
+  inbox-watching automation. `notifyCoach(env, ctx, event)` and `notifyStudent(env, ctx,
+  to, event)` dispatch through `ctx.waitUntil()` so email/webhook latency never blocks
+  the caller, each path independently gated (`COACH_NOTIFY_EMAIL`+`RESEND_API_KEY` for
+  coach email, `COACH_WEBHOOK_URL` for the webhook, `RESEND_API_KEY` alone for the
+  student email) and wrapped in its own `try/catch` — `sendEmail` doesn't catch a
+  network-level `fetch` rejection, and neither does a bare webhook `fetch`, so either
+  failing must never surface as a broken RSVP. No env vars set is a pure no-op.
 - `public/app.js` (Phase 1, T1.1) — shared frontend behaviour: the nav/hamburger toggle,
   the logout handler, `escapeHtml`, the `#year` footer stamp, a
   `fetchJson(url, options)` wrapper (`fetch` + `.json()` in one call, catching a network
@@ -300,13 +337,13 @@ and `migrations/0003_class_capacity.sql`. Six tables:
 | `/api/coach/templates/:id` | PATCH | coach | **partial update** (Phase 2, T2.2) — `{active}` and/or `{capacity}`, at least one required; a body with neither is rejected |
 | `/api/coach/sessions?date=` | GET | coach | template suggestions + existing sessions for a date, both now include `capacity` |
 | `/api/coach/sessions` | POST | coach | create from template (idempotent, capacity **not** copied from the template — see resolution rule above) or one-off |
-| `/api/coach/sessions/:id` | GET | coach | session detail + roster merged with existing attendance; also returns `capacity` (this session's own), `effectiveCapacity` (resolved), and `attendanceSaved` (Phase 2, T2.5 — `true` once any attendance row exists for this session, letting the client distinguish "never saved" from "saved with everyone absent") |
-| `/api/coach/sessions/:id` | PATCH | coach | (Phase 2, T2.2) `{capacity}` — the per-session override; `null`/`''` clears back to inheriting the template |
+| `/api/coach/sessions/:id` | GET | coach | session detail + roster merged with existing attendance; also returns `capacity` (this session's own), `effectiveCapacity` (resolved), `attendanceSaved` (Phase 2, T2.5 — `true` once any attendance row exists for this session, letting the client distinguish "never saved" from "saved with everyone absent"), and (Phase 3, T3.7) a separate `waitlist` array (`{id,name,email}`, queue order) — the roster's own `going` flag is `status='going'`-filtered, so a waitlisted student is on the roster (still an active student who could show up) but never pre-marked present |
+| `/api/coach/sessions/:id` | PATCH | coach | (Phase 2, T2.2) `{capacity}` — the per-session override; `null`/`''` clears back to inheriting the template. (Phase 3, T3.5) On success, calls `promoteAndNotify` for this session's own date — safe to call on any capacity change, including a decrease (promotes zero) |
 | `/api/coach/mark-attendance` | POST | coach | `{sessionId,records:[{userId,status}]}`, atomic via `D1Database.batch()` |
-| `/api/coach/next-class` | GET | coach | (Phase 2, T2.4) `{nextClass: null \| {templateId,name,date,startTime,endTime,attending,capacity,spotsRemaining}}` — the soonest class in the next `RSVP_WINDOW_DAYS` days, `null` if nothing's scheduled |
+| `/api/coach/next-class` | GET | coach | (Phase 2, T2.4) `{nextClass: null \| {templateId,name,date,startTime,endTime,attending,capacity,spotsRemaining,waitlisted}}` — the soonest class in the next `RSVP_WINDOW_DAYS` days, `null` if nothing's scheduled. `waitlisted` (Phase 3, T3.7) is the total waitlisted count; the dashboard panel only shows it when non-zero |
 | `/api/student/attendance` | GET | student | own history only |
-| `/api/student/upcoming` | GET | student | next 7 days of weekly-template classes, merged with own RSVPs; each row also has `capacity`, `attending` (everyone's RSVP count, not just the caller's), and `full` |
-| `/api/student/rsvp` | POST | student | `{templateId,date,going}` → insert/delete own `session_rsvps` row. On `going:true` against a class at capacity: **409** `{ok:false, error:'This class is full'}` — a deliberate new status code (the rest of this API only uses 400/404), so Phase 3's waitlist has a distinct signal to hook. A student who already has a row is never rejected (idempotent re-RSVP); the capacity check itself is atomic (`INSERT...SELECT...WHERE COUNT(*) < capacity`, not read-then-insert) so two students racing for the last spot can't both win, with `ON CONFLICT...DO NOTHING` covering a double-submit from the same student racing its own existing-row check. |
+| `/api/student/upcoming` | GET | student | next 7 days of weekly-template classes, merged with own RSVPs; each row has `capacity`, `attending` (`status='going'` count, not just the caller's), `full`, and (Phase 3, T3.6) `rsvpStatus` (`null \| 'going' \| 'waitlisted'`) + `waitlistPosition` (`null` unless waitlisted). `going` means `rsvpStatus === 'going'` specifically — **not** "has any row" (that was the pre-Phase-3 meaning; a waitlisted row would otherwise read as `going:true`, wrongly) |
+| `/api/student/rsvp` | POST | student | `{templateId,date,going}` → insert/delete own `session_rsvps` row. **The old 409 is gone (Phase 3, T3.2).** `going:true` against a class at capacity now waitlists instead of rejecting: `{ok:true, status:'going'\|'waitlisted', position?}`. A student who already has a row is never rejected (idempotent re-RSVP from either status). The going-path capacity check is atomic (`INSERT...SELECT...WHERE COUNT(status='going') < capacity`, not read-then-insert) so two students racing for the last spot can't both win — the loser waitlists instead. `going:false` is `DELETE...RETURNING status`; a freed `going` row calls `promoteAndNotify` (a freed `waitlisted` row does not — nothing to promote into). |
 
 ## Frontend notes
 
@@ -346,7 +383,36 @@ and `migrations/0003_class_capacity.sql`. Six tables:
   the usage guide's "Common maintenance tasks").
 - No IP-based rate limiting on `/api/auth/login`, only the per-account lockout above.
   Fine at gym scale; revisit if abuse ever shows up.
-- No waitlist yet: a full class's RSVP just returns 409, with nothing to join. Phase 3
-  turns that rejection into a waitlist offer + coach notification — deliberately
-  sequenced this way so capacity enforcement (Phase 2) and the waitlist (Phase 3) aren't
-  built in one pass.
+
+## Waitlist and notifications (Phase 3)
+
+A full class's `going:true` RSVP now waitlists instead of returning 409 (see the API
+reference above). Facts worth knowing before touching this code:
+
+- **A `going` row is never demoted, by any code path, ever.** Every capacity decision —
+  the initial atomic insert, and every promotion — is made inside a single SQL
+  statement, never a separate read-count-then-write. `promoteWaitlist` only ever sets
+  `waitlisted` rows to `going`.
+- **Promotion is centralized in `promoteWaitlist`/`promoteAndNotify`** (see "Shared
+  code" above). Four write paths call it: `rsvp.js`'s cancel path (a freed `going` row),
+  `rsvp.js`'s full-class join path (closes the window where a spot opened between the
+  failed going-insert and the waitlist insert — normally promotes nobody),
+  `coach/templates/[id].js`'s capacity PATCH (bounded to `today..RSVP_WINDOW_DAYS`, only
+  dates that actually have a waitlisted row, found with one grouped `DISTINCT` query —
+  a template capacity change affects every future date it expands to, not one date), and
+  `coach/sessions/[id].js`'s capacity PATCH (affects exactly that session's own date).
+- **Two events, D1's decision: waitlist join only, not a class merely reaching
+  capacity.** `waitlist_joined` (to the coach) fires only when a genuinely *new*
+  waitlisted row is created (the insert's own `changes === 1`, not a double-submit
+  no-op) — never on a repeat RSVP from an already-waitlisted student, since that branch
+  returns before ever reaching the insert. `waitlist_promoted` (to the student **and**
+  the coach) fires once per promoted student, driven by the `user_id`s
+  `promoteWaitlist` returns.
+- **Notification env vars** (`public/.dev.vars`, left empty locally; Cloudflare Pages
+  dashboard → Settings → Environment variables in production): `COACH_NOTIFY_EMAIL`
+  (required for the email path, alongside the existing `RESEND_API_KEY`),
+  `COACH_WEBHOOK_URL` + `COACH_WEBHOOK_SECRET` (optional; the secret is sent as
+  `X-CJN-Signature` on the webhook POST). Each of the three notify.js dispatch paths
+  (coach email, coach webhook, student email) is independently gated, so the feature
+  ships working with any combination configured, including none. Dispatch never blocks
+  or breaks the calling request — see `notify.js` above.
