@@ -197,6 +197,13 @@ independent. So:
   or account security: **Phase 4** (payments), **Phase 7** (account safety), **Phase 8** (the
   first unauthenticated write endpoint). Anywhere else, ask before spending it.
 - User-triggered and billed; an agent cannot launch it.
+- **The `reports/` exclusion cannot be applied to `ultra`** (noted 2026-08-07, planning Phase 4):
+  the no-arg form bundles the whole local branch, so there is no diff to filter. On a reserved
+  phase, get the independence by **ordering** instead — run `ultra` while the branch is green
+  but carries *no committed completion report*, and write the report after the review, the
+  triage, the verification table, and the merge. This inverts the usual task order and needs to
+  be stated in the phase's task list, or the executing session will write the report first out
+  of habit.
 
 ---
 
@@ -213,7 +220,7 @@ over-specifying them now guarantees rework.
 | **1** | Shared `app.js` + navigation fixes across every page | 0 | `plan/phase-1.md` — done, merged, live-verified |
 | **2** | Class capacity + RSVP enforcement, next-class headcount panel, attendance pre-fill from RSVP, roster search | 0, 1 | `plan/phase-2.md` — done, merged, live-verified |
 | **3** | Waitlist + coach notification hook (email + optional webhook) | 2 | `plan/phase-3.md` — done, merged, live-verified |
-| **4** | Membership plans, payment recording, overdue flag on the attendance roster | 0, 1 | `plan/phase-4.md` — mapped only |
+| **4** | Membership plans, payment recording, overdue flag on the attendance roster, student self-view | 0, 1, 3 | `plan/phase-4.md` — **detailed into tasks T4.0–T4.11**, 2026-08-07 |
 | **5** | Attendance intelligence: over-limit flags, dormant-student alerts, basic reporting | 2, 4 | `plan/phase-5.md` — mapped only |
 | **6** | Progress notes, skill/competency grid, discipline tags | 1 | `plan/phase-6.md` — mapped only |
 | **7** | Account safety: self-service password reset, login rate limiting, audit trail | 0 | `plan/phase-7.md` — mapped only |
@@ -234,8 +241,14 @@ Not blocking Phases 0–2; must be answered before the phase named. Full context
    decisions raised at the checkpoint and not answered: capacity raises auto-promote (D2), and
    waitlisted students see their queue position (D3). All three are defaults, isolated to one
    place each, and cheap to flip — but flip them **before** T3.2, not after.
-2. **Phase 4** — what happens to an overdue member's RSVP? Current assumption: nothing, flag
-   only, consistent with the over-limit decision.
+2. ~~**Phase 4** — what happens to an overdue member's RSVP?~~ **Answered by Giovanni
+   2026-08-07: nothing, flag only, no enforcement anywhere.** An overdue member RSVPs
+   normally, waitlists normally, and — the case `plan/phase-3.md` flagged as newly reachable
+   — **is still auto-promoted off a waitlist in strict queue order**. Consequence recorded as
+   a hard constraint in `plan/phase-4.md`: `_utils/waitlist.js` is not edited in Phase 4.
+   Alongside it, five further real-world facts (the three plans and their prices,
+   calendar-month billing, cash/EFT record-only, students see their own status) and eight
+   decisions D1–D8 were settled at the Phase 3→4 checkpoint — see `plan/phase-4.md`.
 3. **Phase 6** — who defines the skill taxonomy, and is it editable in the UI or seeded in a
    migration? Current assumption: coach-editable in the UI.
 4. **Phase 8** — does a trial booking create a `pending` user (reusing the Phase 2 approval

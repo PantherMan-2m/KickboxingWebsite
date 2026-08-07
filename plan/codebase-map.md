@@ -210,3 +210,18 @@ since this map is structural (what exists and where), not explanatory (why/how).
 `scripts/db-reset-seed.js`, `test/unit/`, `test/integration/`, `test/helpers/`. Detail in
 `coach-student-system-technical.md`'s "Local development environment" and "Automated
 tests" sections.
+
+### `public/.wrangler/` layout (verified 2026-08-07 — read this before deleting anything)
+
+Gitignored by `.gitignore:3`'s `.wrangler/` (no leading slash, so it matches at any depth;
+`git check-ignore -v public/.wrangler/tmp` confirms). **No `.gitignore` change is needed
+and a redundant `public/.wrangler/` line should not be added.** Three subdirectories, and
+they are *not* equally disposable:
+
+| Path | What it is | Safe to delete? |
+|---|---|---|
+| `tmp/` | one `bundle-*` dir per `wrangler pages dev` start; accumulates forever (673 dirs / 87 MB by 2026-08-07) | **Yes** — pure litter, noisy in filesystem greps |
+| `state/v3/d1` | **the local D1 database** the test suite and `npm run dev` run against (47 MB) | **No** — deleting it discards local data and forces `npm run db:reset` |
+| `cache/`, `state/{cache,observability,workflows}` | wrangler's own caches | Yes, but no benefit |
+
+So the cleanup command is `rm -rf public/.wrangler/tmp`, never `rm -rf public/.wrangler`.
