@@ -17,8 +17,12 @@ see main `HANDOVER.md` for the full repo-structure history). The deployed site i
 `wrangler.jsonc` (at `public/wrangler.jsonc`) declares the `DB` binding's `database_name`/`database_id`
 or migration tracking (`wrangler d1 migrations`/`d1 execute`); the *production* binding is
 set via the Cloudflare Pages dashboard (Settings → Bindings), not read from `wrangler.jsonc`
-for the live Git-integrated deploy. **`wrangler pages dev` does NOT auto-bind D1 from this
-config** — see "Local development environment" below for the (non-obvious) reason and fix.
+for the live Git-integrated deploy (Phase 0 finding, unverified since). **This does not
+generalize to plaintext environment variables/secrets** — T3.8 found that UI (Settings →
+Environment variables) disabled for this project, config-file-managed instead; see
+"Waitlist and notifications" below for the `wrangler pages secret put` workaround actually
+used. **`wrangler pages dev` does NOT auto-bind D1 from this config** — see "Local
+development environment" below for the (non-obvious) reason and fix.
 
 ## Local development environment
 
@@ -408,11 +412,24 @@ reference above). Facts worth knowing before touching this code:
   returns before ever reaching the insert. `waitlist_promoted` (to the student **and**
   the coach) fires once per promoted student, driven by the `user_id`s
   `promoteWaitlist` returns.
-- **Notification env vars** (`public/.dev.vars`, left empty locally; Cloudflare Pages
-  dashboard → Settings → Environment variables in production): `COACH_NOTIFY_EMAIL`
+- **Notification env vars** (`public/.dev.vars`, left empty locally): `COACH_NOTIFY_EMAIL`
   (required for the email path, alongside the existing `RESEND_API_KEY`),
   `COACH_WEBHOOK_URL` + `COACH_WEBHOOK_SECRET` (optional; the secret is sent as
   `X-CJN-Signature` on the webhook POST). Each of the three notify.js dispatch paths
   (coach email, coach webhook, student email) is independently gated, so the feature
   ships working with any combination configured, including none. Dispatch never blocks
   or breaks the calling request — see `notify.js` above.
+  **Set in production via `wrangler`, not the dashboard** (T3.8): this project's Pages
+  Variables UI (Settings → Environment variables) is disabled, showing "managed through
+  wrangler.toml" — a consequence of declaring `pages_build_output_dir` in
+  `wrangler.jsonc`, which puts config-file management in front of that particular UI.
+  `wrangler pages secret put` still works, since it writes via the API directly rather
+  than through that UI:
+  ```bash
+  printf '%s' 'info@cjnacademy.com' | wrangler pages secret put COACH_NOTIFY_EMAIL --project-name=kickboxingwebsite
+  ```
+  Run from `public/` (or pass `--cwd public`). `wrangler pages secret list
+  --project-name=kickboxingwebsite` confirms what's set (values are write-only —
+  Encrypted, not readable back). Note the actual Cloudflare Pages project name is
+  `kickboxingwebsite`, not `cjn-academy-website` (the unrelated `"name"` field in
+  `public/wrangler.jsonc`) — get this from `wrangler pages project list` if unsure.

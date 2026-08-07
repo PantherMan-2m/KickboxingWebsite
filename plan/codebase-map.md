@@ -181,8 +181,20 @@ no CSS/app.js edits were needed). Check with `grep -rn "app\.js?v=" public`.
 `COACH_NOTIFY_EMAIL`, `COACH_WEBHOOK_URL`, `COACH_WEBHOOK_SECRET` -- read by
 `_utils/notify.js`, alongside the pre-existing `RESEND_API_KEY`. `public/.dev.vars`
 (gitignored, T3.8) holds the three new names **left empty** locally, so `npm run dev`
-and the test suite always exercise the no-op path. Production values live in the
-Cloudflare Pages dashboard (Settings → Environment variables), not in any tracked file.
+and the test suite always exercise the no-op path.
+
+**Production values are set via `wrangler`, not the dashboard.** This project's Pages
+Variables UI (Settings → Environment variables) is disabled ("managed through
+wrangler.toml" -- a consequence of `pages_build_output_dir` in `wrangler.jsonc`).
+`wrangler pages secret put` still works, via the API directly:
+```bash
+printf '%s' 'info@cjnacademy.com' | wrangler pages secret put COACH_NOTIFY_EMAIL --project-name=kickboxingwebsite
+```
+The real Cloudflare Pages project name is `kickboxingwebsite` -- **not**
+`cjn-academy-website`, the unrelated `"name"` field in `public/wrangler.jsonc`. Confirm
+with `wrangler pages project list` / `wrangler pages secret list --project-name=...`
+(values are write-only, Encrypted). `COACH_NOTIFY_EMAIL` is set as of T3.8; `RESEND_API_KEY`
+was already present. `COACH_WEBHOOK_URL`/`COACH_WEBHOOK_SECRET` are unset (email-only).
 
 ## Database schema (6 tables)
 
