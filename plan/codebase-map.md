@@ -2,9 +2,9 @@
 
 Findings get recorded here as data, not re-derived each session — per `PLAN.md`'s "Keeping
 sessions cheap" rule. Verified against the code on 2026-08-07, after Phase 3 (waitlist +
-coach notifications) landed on `phase-3-waitlist`, migration `0004` applied locally (not
-yet to production — see T3.8 in `plan/phase-3.md`). Update this file when the codebase's
-shape changes; do not let a session re-grep for it.
+coach notifications) merged to `main`, deployed, and live-verified; migration `0004`
+applied to production. Update this file when the codebase's shape changes; do not let a
+session re-grep for it.
 
 ## Page inventory (12 HTML pages, `public/`)
 
@@ -166,10 +166,11 @@ functions/
 `0003_class_capacity.sql` (adds nullable `capacity` to `class_templates` and
 `class_sessions`; applied to production 2026-08-07, preceded by a fresh backup per T0.3),
 `0004_rsvp_status.sql` (adds `session_rsvps.status TEXT NOT NULL DEFAULT 'going'` + an
-index on `(template_id, session_date, status, created_at)`; applied **locally only** as
-of this writing -- production application is T3.8, a `[HUMAN GATE]`, blocked on
-Giovanni's confirmation). Tracked via `migrations_dir` in `wrangler.jsonc`. Next number
-is `0005`.
+index on `(template_id, session_date, status, created_at)`; applied to production
+2026-08-07, preceded by a fresh backup, `wrangler d1 migrations list --remote` confirmed
+zero pending and `SELECT COUNT(*) FROM session_rsvps WHERE status <> 'going'` returned 0
+before the deploy). Tracked via `migrations_dir` in `wrangler.jsonc`. Next number is
+`0005`.
 
 ## Static asset versions (bump on every change, every referencing page — `PLAN.md` rule 6)
 

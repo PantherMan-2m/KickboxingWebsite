@@ -212,7 +212,7 @@ over-specifying them now guarantees rework.
 | **0** | Foundation: Node 24/Wrangler 4, migration tracking, backups, local test environment, rollback tag | — | `plan/phase-0.md` — done, merged |
 | **1** | Shared `app.js` + navigation fixes across every page | 0 | `plan/phase-1.md` — done, merged, live-verified |
 | **2** | Class capacity + RSVP enforcement, next-class headcount panel, attendance pre-fill from RSVP, roster search | 0, 1 | `plan/phase-2.md` — done, merged, live-verified |
-| **3** | Waitlist + coach notification hook (email + optional webhook) | 2 | `plan/phase-3.md` — **specified 2026-08-07, ready to execute** |
+| **3** | Waitlist + coach notification hook (email + optional webhook) | 2 | `plan/phase-3.md` — done, merged, live-verified |
 | **4** | Membership plans, payment recording, overdue flag on the attendance roster | 0, 1 | `plan/phase-4.md` — mapped only |
 | **5** | Attendance intelligence: over-limit flags, dormant-student alerts, basic reporting | 2, 4 | `plan/phase-5.md` — mapped only |
 | **6** | Progress notes, skill/competency grid, discipline tags | 1 | `plan/phase-6.md` — mapped only |
