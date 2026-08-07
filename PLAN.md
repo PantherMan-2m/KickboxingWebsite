@@ -187,6 +187,12 @@ independent. So:
 - **Default: a fresh Sonnet reviewer session per phase branch.** It gets the branch diff, this
   document's four-bucket rule, and the phase's exit conditions — and it must not be the session
   that wrote the code.
+- **Exclude `reports/` from the diff you hand the reviewer** (added 2026-08-07, after the Phase 3
+  review): `git diff main...phase-N-branch -- . ':(exclude)reports/'`. A reviewer told not to read
+  the completion report will still be shown its full text by any `git show` of the docs commit
+  that added it, which defeats the independence the review exists for. Phase 3's reviewer hit
+  this, stopped, and re-derived the fact independently — correct behaviour, but the prompt should
+  not have put them there.
 - **`/code-review ultra` is reserved** for phases where a missed bug costs real money, real data,
   or account security: **Phase 4** (payments), **Phase 7** (account safety), **Phase 8** (the
   first unauthenticated write endpoint). Anywhere else, ask before spending it.
