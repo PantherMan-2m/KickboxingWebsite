@@ -237,3 +237,52 @@ test('a student promoted before their own waitlist_joined decision gets only wai
     assert.match(call.body.subject, /WAITLIST_PROMOTED/, 'no waitlist_joined dispatch should have fired for the promoted student');
   }
 });
+
+// Opus spot-check finding: finalRow (rsvp.js's re-read after the waitlist
+// insert) can be null -- a concurrent cancel (going: false) from the *same*
+// student, racing between the waitlist insert and this re-read, deletes the
+// row out from under it. Before the fix, `finalRow.status` on a null finalRow
+// threw a bare TypeError (uncaught -> 500) instead of the fix's `status: null`
+// response with no notification.
+//
+// Reaching this deterministically through two genuinely concurrent requests
+// (mirroring the timing-raced test above) turned out reliable in practice --
+// B's own cancel is a single DELETE, fast enough to consistently land inside
+// the multi-query window between B's own waitlist insert and its final-status
+// re-read once its start is delayed past B's join request's first few queries.
+// Bounded retry (not unbounded) for the same reason as the race test above: a
+// real regression still fails loudly instead of hanging.
+test('a concurrent self-cancel between the waitlist insert and the status re-read does not throw, and emits no waitlist_joined', async () => {
+  const env = { COACH_NOTIFY_EMAIL: 'coach@example.test', RESEND_API_KEY: 'test-key' };
+
+  let joinRes;
+  let attempt = 0;
+  for (; attempt < 10; attempt++) {
+    const templateId = `notify-self-cancel-race-${attempt}`;
+    await createTemplate(templateId, DOW, 1);
+    const fillCtx = makeContext({ env, user: STUDENT_A, body: { templateId, date: DATE, going: true } });
+    await rsvpHandler(fillCtx.context);
+    fetchCalls = [];
+
+    const joinCtx = makeContext({ env, user: STUDENT_B, body: { templateId, date: DATE, going: true } });
+    const cancelCtx = makeContext({ env, user: STUDENT_B, body: { templateId, date: DATE, going: false } });
+    const joinPromise = rsvpHandler(joinCtx.context);
+    await new Promise((resolve) => setTimeout(resolve, 300 + attempt * 60));
+    const cancelPromise = rsvpHandler(cancelCtx.context);
+    [joinRes] = await Promise.all([joinPromise, cancelPromise]);
+    await Promise.all([...joinCtx.waitUntilPromises, ...cancelCtx.waitUntilPromises]);
+
+    assert.equal(joinRes.status, 200, `join must never 500 regardless of timing (attempt ${attempt})`);
+    const row = await db
+      .prepare('SELECT status FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?')
+      .bind(templateId, DATE, STUDENT_B.id)
+      .first();
+    if (!row) break; // landed in the target interleaving: B's row is gone
+  }
+
+  assert.ok(attempt < 10, `could not reproduce the self-cancel-during-join race after ${attempt + 1} attempts`);
+  const joinBody = await joinRes.json();
+  assert.equal(joinBody.ok, true);
+  assert.equal(joinBody.status, null, 'no row exists to report a status for');
+  assert.equal(fetchCalls.length, 0, 'no waitlist_joined for a row that no longer exists by the time it would be sent');
+});

@@ -121,6 +121,9 @@ export async function onRequestPost(context) {
       // another concurrent write (e.g. a coach's capacity raise landing in the
       // same window) can free the spot and promote this student via its own
       // promoteAndNotify call instead, and that must be excluded here too.
+      // finalRow can be null: a concurrent cancel (going: false) from the same
+      // student, racing between the waitlist insert above and this re-read,
+      // can delete the row out from under us -- their own cancel wins.
       const finalRow = await context.env.DB.prepare(
         'SELECT status FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?'
       )
@@ -131,7 +134,10 @@ export async function onRequestPost(context) {
       // double-submit no-op), and finalRow confirms this student is still
       // waitlisted -- if they were promoted above, waitlist_joined would be a
       // duplicate notification (they already got waitlist_promoted instead).
-      if (waitlistInsert.meta.changes === 1 && finalRow.status === 'waitlisted') {
+      // A null finalRow (concurrent cancel deleted the row) means there is no
+      // waitlist join to notify about either -- the row it would describe no
+      // longer exists.
+      if (waitlistInsert.meta.changes === 1 && finalRow?.status === 'waitlisted') {
         const queueLength = await waitlistCount(context.env.DB, templateId, date);
         const event = buildEvent('waitlist_joined', {
           className: template.name,
@@ -144,6 +150,9 @@ export async function onRequestPost(context) {
         notifyCoach(context.env, context, event);
       }
 
+      if (!finalRow) {
+        return jsonResponse({ ok: true, status: null });
+      }
       if (finalRow.status === 'going') {
         return jsonResponse({ ok: true, status: 'going' });
       }
