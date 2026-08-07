@@ -1,3 +1,4 @@
 node_modules/
 backups/
 .wrangler/
+.dev.vars
