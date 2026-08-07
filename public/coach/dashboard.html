@@ -70,11 +70,13 @@
     const attendingText = c.capacity === null
       ? `${c.attending} going`
       : `${c.attending} / ${c.capacity} going (${c.spotsRemaining} spot${c.spotsRemaining === 1 ? '' : 's'} left)`;
+    // Shown only when non-zero -- a waitlist of zero isn't worth a coach's attention.
+    const waitlistText = c.waitlisted > 0 ? ` · ${c.waitlisted} waitlisted` : '';
 
     panel.innerHTML = `
       <p><strong>${escapeHtml(c.name)}</strong></p>
       <p class="muted">${c.date}${c.startTime ? ' · ' + c.startTime : ''}${c.endTime ? ' - ' + c.endTime : ''}</p>
-      <p>${attendingText}</p>
+      <p>${attendingText}${waitlistText}</p>
     `;
   }
 

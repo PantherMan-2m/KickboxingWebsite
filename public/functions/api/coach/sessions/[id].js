@@ -37,8 +37,10 @@ export async function onRequestGet(context) {
 
   // RSVPs are keyed to the weekly template + date, not this session row (students RSVP
   // before a coach ever creates the session) -- one-off sessions have no template, so
-  // there's nothing to match and every row's `going` stays false.
+  // there's nothing to match and every row's `going` stays false, and there's nobody
+  // to waitlist either (fact 4).
   let goingIds = new Set();
+  let waitlist = [];
   if (session.templateId) {
     const { results: rsvps } = await context.env.DB.prepare(
       `SELECT user_id FROM session_rsvps WHERE template_id = ? AND session_date = ? AND status = 'going'`
@@ -46,6 +48,20 @@ export async function onRequestGet(context) {
       .bind(session.templateId, session.date)
       .all();
     goingIds = new Set(rsvps.map((r) => r.user_id));
+
+    // Queue order (created_at, user_id) -- same ordering promoteWaitlist uses, so
+    // this list is literally "who's promoted next" read top to bottom. Kept
+    // separate from `roster` so the client can't confuse a waitlisted student
+    // with someone to mark present.
+    const { results: waitlistRows } = await context.env.DB.prepare(
+      `SELECT u.id, u.name, u.email FROM session_rsvps r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.template_id = ? AND r.session_date = ? AND r.status = 'waitlisted'
+       ORDER BY r.created_at, r.user_id`
+    )
+      .bind(session.templateId, session.date)
+      .all();
+    waitlist = waitlistRows;
   }
 
   // `status: r.status || 'absent'` above collapses "no attendance row exists yet" and "a
@@ -73,6 +89,7 @@ export async function onRequestGet(context) {
       attendanceSaved: attendanceCount.n > 0,
     },
     roster: roster.map((r) => ({ ...r, status: r.status || 'absent', going: goingIds.has(r.id) })),
+    waitlist,
   });
 }
 

@@ -1,6 +1,7 @@
 import { jsonResponse } from '../_utils/auth.js';
 import { sastNowParts, RSVP_WINDOW_DAYS } from '../_utils/dates.js';
 import { selectNextClass } from '../_utils/schedule.js';
+import { waitlistCount } from '../_utils/waitlist.js';
 
 export async function onRequestGet(context) {
   const { date: today, time: nowTime } = sastNowParts();
@@ -32,6 +33,7 @@ export async function onRequestGet(context) {
     .bind(next.templateId, next.date)
     .first();
   const attending = attendingRow.n;
+  const waitlisted = await waitlistCount(context.env.DB, next.templateId, next.date);
 
   return jsonResponse({
     ok: true,
@@ -44,6 +46,7 @@ export async function onRequestGet(context) {
       attending,
       capacity,
       spotsRemaining: capacity === null ? null : Math.max(0, capacity - attending),
+      waitlisted,
     },
   });
 }

@@ -95,8 +95,23 @@
     document.getElementById('capacityInput').value = data.session.capacity ?? '';
     document.getElementById('capacityForm').style.display = '';
 
+    // Kept visually separate from the roster table below (own heading, own list,
+    // never a table row) so a waitlisted student can never be confused with
+    // someone to mark present/absent/excused -- they show up in queue order,
+    // i.e. literally "who's promoted next" read top to bottom.
+    const waitlistHtml = data.waitlist && data.waitlist.length > 0
+      ? `
+        <div class="card" style="margin-top:16px">
+          <p><strong>Waitlisted (${data.waitlist.length})</strong></p>
+          <ol>
+            ${data.waitlist.map((w) => `<li>${escapeHtml(w.name)}</li>`).join('')}
+          </ol>
+        </div>
+      `
+      : '';
+
     if (data.roster.length === 0) {
-      rosterContainer.innerHTML = '<p class="muted">No active students on the roster yet.</p>';
+      rosterContainer.innerHTML = '<p class="muted">No active students on the roster yet.</p>' + waitlistHtml;
       return;
     }
 
@@ -128,7 +143,7 @@
         </tbody>
       </table>
       </div>
-    `;
+    ` + waitlistHtml;
   }
 
   document.getElementById('capacityForm').addEventListener('submit', async (e) => {
