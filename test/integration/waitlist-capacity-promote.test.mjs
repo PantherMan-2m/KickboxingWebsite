@@ -185,3 +185,34 @@ test('raising a session-level capacity override promotes for that one date only'
   assert.equal(await statusOf('t5-session', otherDate, B), 'waitlisted', 'the other date must be unaffected by a session-level override');
   assert.equal(fetchCalls.length, 1, 'exactly one promotion event');
 });
+
+// Review fix 4: no prior test covered clearing capacity to null (unlimited) --
+// promoteWaitlist's null-capacity branch (promote every waitlisted row, no
+// LIMIT arithmetic) was only exercised directly against promoteWaitlist itself
+// (test/integration/waitlist-promotion.test.mjs), never through this endpoint.
+test('clearing a template capacity to null (unlimited) promotes every waitlisted student, one event each', async () => {
+  await createTemplate('t5-null', 1, 1);
+  const date = addDaysIso(todayIso(), 2);
+
+  await insertRsvp('t5-null', date, STUDENT_X, 'going', '2020-01-01 00:00:00');
+  await insertRsvp('t5-null', date, A, 'waitlisted', '2020-01-01 00:01:00');
+  await insertRsvp('t5-null', date, B, 'waitlisted', '2020-01-01 00:02:00');
+  await insertRsvp('t5-null', date, C, 'waitlisted', '2020-01-01 00:03:00');
+
+  const ctx = makeContext({ params: { id: 't5-null' }, body: { capacity: null } });
+  const res = await patchTemplate(ctx);
+  assert.equal(res.status, 200);
+  await Promise.all(ctx._waitUntilPromises);
+
+  for (const [id, label] of [[A, 'A'], [B, 'B'], [C, 'C']]) {
+    assert.equal(await statusOf('t5-null', date, id), 'going', `${label} should be promoted -- unlimited capacity means nobody stays waitlisted`);
+  }
+  assert.equal(await statusOf('t5-null', date, STUDENT_X), 'going', 'the pre-existing going student must be untouched');
+
+  assert.equal(fetchCalls.length, 3, 'one waitlist_promoted dispatch per promoted student (A, B, C), not one combined dispatch');
+  const recipients = fetchCalls.map((c) => c.body.to[0]).sort();
+  const emails = await Promise.all(
+    [A, B, C].map(async (id) => (await db.prepare('SELECT email FROM users WHERE id = ?').bind(id).first()).email)
+  );
+  assert.deepEqual(recipients, emails.sort());
+});
