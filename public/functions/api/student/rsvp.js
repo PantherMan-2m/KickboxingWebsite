@@ -42,6 +42,8 @@ export async function onRequestPost(context) {
 
     // A student who already has a row is never rejected by capacity -- a full class
     // must not break the idempotent re-RSVP the ON CONFLICT ... DO NOTHING below relies on.
+    // Deliberately unfiltered on status: this must find the row whether it's going or
+    // waitlisted, since the two need different responses (T3.2).
     const existing = await context.env.DB.prepare(
       'SELECT 1 FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?'
     )
@@ -79,7 +81,7 @@ export async function onRequestPost(context) {
       const result = await context.env.DB.prepare(
         `INSERT INTO session_rsvps (template_id, session_date, user_id)
          SELECT ?, ?, ?
-         WHERE (SELECT COUNT(*) FROM session_rsvps WHERE template_id = ? AND session_date = ?) < ?
+         WHERE (SELECT COUNT(*) FROM session_rsvps WHERE template_id = ? AND session_date = ? AND status = 'going') < ?
          ON CONFLICT (template_id, session_date, user_id) DO NOTHING`
       )
         .bind(templateId, date, context.data.user.id, templateId, date, effectiveCapacity)
@@ -88,7 +90,9 @@ export async function onRequestPost(context) {
       if (result.meta.changes === 0) {
         // Ambiguous on its own: either the class was full (the WHERE blocked the SELECT),
         // or this exact row already existed (ON CONFLICT silently no-op'd). Re-query for
-        // this user's own row to tell the two apart.
+        // this user's own row to tell the two apart. Deliberately unfiltered on status --
+        // this branch is about to insert a waitlisted row itself (T3.2), so it must find
+        // any pre-existing row regardless of status.
         const stillExists = await context.env.DB.prepare(
           'SELECT 1 FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?'
         )
@@ -100,6 +104,8 @@ export async function onRequestPost(context) {
       }
     }
   } else {
+    // Deliberately unfiltered on status: a waitlisted student leaving the queue must
+    // delete their row too, not only a going student cancelling (T3.2).
     await context.env.DB.prepare(
       `DELETE FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?`
     )

@@ -40,7 +40,7 @@ export async function onRequestGet(context) {
   let goingIds = new Set();
   if (session.templateId) {
     const { results: rsvps } = await context.env.DB.prepare(
-      `SELECT user_id FROM session_rsvps WHERE template_id = ? AND session_date = ?`
+      `SELECT user_id FROM session_rsvps WHERE template_id = ? AND session_date = ? AND status = 'going'`
     )
       .bind(session.templateId, session.date)
       .all();

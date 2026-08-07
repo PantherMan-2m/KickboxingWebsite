@@ -27,7 +27,7 @@ export async function onRequestGet(context) {
   const capacity = session && session.capacity !== null ? session.capacity : templateCapacityMap.get(next.templateId);
 
   const attendingRow = await context.env.DB.prepare(
-    'SELECT COUNT(*) AS n FROM session_rsvps WHERE template_id = ? AND session_date = ?'
+    "SELECT COUNT(*) AS n FROM session_rsvps WHERE template_id = ? AND session_date = ? AND status = 'going'"
   )
     .bind(next.templateId, next.date)
     .first();

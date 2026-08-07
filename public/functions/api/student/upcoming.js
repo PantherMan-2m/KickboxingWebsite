@@ -12,6 +12,10 @@ export async function onRequestGet(context) {
   ).all();
   const templateCapacityMap = new Map(templates.map((t) => [t.id, t.capacity]));
 
+  // Deliberately unfiltered on status: this row means "the student has some RSVP
+  // here", not "the student is going" -- `going` below is about to be redefined to
+  // mean status === 'going' specifically, with a separate waitlist position, once
+  // waitlisted rows exist (T3.6).
   const { results: rsvps } = await context.env.DB.prepare(
     `SELECT template_id AS templateId, session_date AS date FROM session_rsvps
      WHERE user_id = ? AND session_date BETWEEN ? AND ?`
@@ -25,7 +29,7 @@ export async function onRequestGet(context) {
   // going" on the same row, and shadowing it here would be a bug waiting to happen.
   const { results: counts } = await context.env.DB.prepare(
     `SELECT template_id AS templateId, session_date AS date, COUNT(*) AS n
-     FROM session_rsvps WHERE session_date BETWEEN ? AND ?
+     FROM session_rsvps WHERE session_date BETWEEN ? AND ? AND status = 'going'
      GROUP BY template_id, session_date`
   )
     .bind(dates[0], dates[dates.length - 1])
