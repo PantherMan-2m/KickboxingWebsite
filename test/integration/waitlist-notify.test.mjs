@@ -156,3 +156,84 @@ test('promoting two students at once emits two waitlist_promoted events, not one
   const recipients = fetchCalls.map((c) => c.body.to[0]).sort();
   assert.deepEqual(recipients, [STUDENT_A.email, STUDENT_B.email].sort());
 });
+
+// Review fix 3: rsvp.js's full-class branch inserts a waitlisted row and then
+// immediately calls promoteAndNotify (to close the window where a spot opened
+// mid-request). When that call -- or any other concurrent write's own
+// promoteAndNotify call -- ends up promoting the student who just joined, the
+// old code still unconditionally sent waitlist_joined too, producing two
+// events for one request. The fix checks this student's actual final status
+// (not just whether *this* request's own promoteAndNotify call named them)
+// before deciding to send waitlist_joined.
+
+test('an ordinary waitlist join (no concurrent promotion) still emits exactly one waitlist_joined', async () => {
+  await createTemplate('notify-ordinary-join', DOW, 1);
+  const env = { COACH_NOTIFY_EMAIL: 'coach@example.test', RESEND_API_KEY: 'test-key' };
+
+  const fillCtx = makeContext({ env, user: STUDENT_A, body: { templateId: 'notify-ordinary-join', date: DATE, going: true } });
+  await rsvpHandler(fillCtx.context);
+  fetchCalls = [];
+
+  const joinCtx = makeContext({ env, user: STUDENT_B, body: { templateId: 'notify-ordinary-join', date: DATE, going: true } });
+  const joinRes = await rsvpHandler(joinCtx.context);
+  await Promise.all(joinCtx.waitUntilPromises);
+
+  assert.equal((await joinRes.json()).status, 'waitlisted');
+  assert.equal(fetchCalls.length, 1, 'exactly one dispatch for an ordinary join with no concurrent promotion');
+  assert.match(fetchCalls[0].body.subject, /WAITLIST_JOINED/);
+});
+
+test('a student promoted before their own waitlist_joined decision gets only waitlist_promoted, never both', async () => {
+  const env = { COACH_NOTIFY_EMAIL: 'coach@example.test', RESEND_API_KEY: 'test-key' };
+
+  // Races student A's cancellation (frees the one spot) against student B's
+  // join on the same full class -- the window rsvp.js's own comment describes
+  // ("closes the window where a spot opened between the failed going-insert
+  // and the waitlist insert"). Every DB call here goes through one real,
+  // network-like round-trip (getPlatformProxy's D1 binding), ~80-100ms each,
+  // and B's going:true path makes several of them (template lookup,
+  // existing-row check, session capacity lookup, the atomic insert, the
+  // waitlist insert, promoteAndNotify's own reads) before its final status
+  // check, vs. A's single DELETE + a much shorter promoteAndNotify. Starting
+  // both at once lets A's whole request finish before B's atomic insert even
+  // runs, so B just wins the spot outright -- empirically confirmed, not
+  // theoretical (diagnostic timestamps during development showed A settling
+  // before B's atomic insert in every unlimited-delay run). Delaying A's start
+  // until after B's atomic insert has had time to run (but well before B's own
+  // later promoteAndNotify) reliably lands B in the waitlisted-then-
+  // immediately-promoted branch instead.
+  //
+  // The still-valid alternative outcome (B's early capacity read already sees
+  // the freed spot and succeeds outright, never touching the waitlisted
+  // branch) doesn't exercise this fix, so it's distinguished by fetchCalls
+  // staying empty and retried on a fresh template rather than asserted on
+  // directly -- a bounded retry, not an unbounded one, so a real regression
+  // still fails loudly instead of hanging.
+  let joinBody;
+  let attempt = 0;
+  for (; attempt < 8; attempt++) {
+    const templateId = `notify-instant-promote-${attempt}`;
+    await createTemplate(templateId, DOW, 1);
+    const fillCtx = makeContext({ env, user: STUDENT_A, body: { templateId, date: DATE, going: true } });
+    await rsvpHandler(fillCtx.context);
+    fetchCalls = [];
+
+    const cancelCtx = makeContext({ env, user: STUDENT_A, body: { templateId, date: DATE, going: false } });
+    const joinCtx = makeContext({ env, user: STUDENT_B, body: { templateId, date: DATE, going: true } });
+    const joinPromise = rsvpHandler(joinCtx.context);
+    await new Promise((resolve) => setTimeout(resolve, 250 + attempt * 60));
+    const cancelPromise = rsvpHandler(cancelCtx.context);
+    const [joinRes] = await Promise.all([joinPromise, cancelPromise]);
+    await Promise.all([...cancelCtx.waitUntilPromises, ...joinCtx.waitUntilPromises]);
+
+    joinBody = await joinRes.json();
+    if (fetchCalls.length > 0) break; // landed in the target interleaving
+  }
+
+  assert.ok(fetchCalls.length > 0, `could not reproduce the promote-before-join-decision race after ${attempt + 1} attempts`);
+  assert.equal(joinBody.status, 'going', 'B should have ended up promoted within this same request');
+  assert.equal(fetchCalls.length, 2, 'exactly one waitlist_promoted event (coach + student) -- never a waitlist_joined as well');
+  for (const call of fetchCalls) {
+    assert.match(call.body.subject, /WAITLIST_PROMOTED/, 'no waitlist_joined dispatch should have fired for the promoted student');
+  }
+});

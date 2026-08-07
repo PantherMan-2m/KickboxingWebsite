@@ -109,9 +109,29 @@ export async function onRequestPost(context) {
         .bind(templateId, date, context.data.user.id)
         .run();
 
+      // Closes the window where a spot opened between the failed going-insert and
+      // the waitlist insert just above -- normally promotes nobody. Run this
+      // *before* deciding on waitlist_joined below: if this student ends up
+      // promoted before that decision, they get a waitlist_promoted event
+      // instead, never both.
+      await promoteAndNotify(context, templateId, date);
+
+      // The definitive check is this student's actual current status, not just
+      // whether *this* promoteAndNotify call's own return value named them --
+      // another concurrent write (e.g. a coach's capacity raise landing in the
+      // same window) can free the spot and promote this student via its own
+      // promoteAndNotify call instead, and that must be excluded here too.
+      const finalRow = await context.env.DB.prepare(
+        'SELECT status FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?'
+      )
+        .bind(templateId, date, context.data.user.id)
+        .first();
+
       // changes===1 means a genuinely new waitlisted row was created (not a
-      // double-submit no-op) -- fire waitlist_joined exactly once for it, per D1.
-      if (waitlistInsert.meta.changes === 1) {
+      // double-submit no-op), and finalRow confirms this student is still
+      // waitlisted -- if they were promoted above, waitlist_joined would be a
+      // duplicate notification (they already got waitlist_promoted instead).
+      if (waitlistInsert.meta.changes === 1 && finalRow.status === 'waitlisted') {
         const queueLength = await waitlistCount(context.env.DB, templateId, date);
         const event = buildEvent('waitlist_joined', {
           className: template.name,
@@ -124,15 +144,6 @@ export async function onRequestPost(context) {
         notifyCoach(context.env, context, event);
       }
 
-      // Closes the window where a spot opened between the failed going-insert and
-      // the waitlist insert just above -- normally promotes nobody.
-      await promoteAndNotify(context, templateId, date);
-
-      const finalRow = await context.env.DB.prepare(
-        'SELECT status FROM session_rsvps WHERE template_id = ? AND session_date = ? AND user_id = ?'
-      )
-        .bind(templateId, date, context.data.user.id)
-        .first();
       if (finalRow.status === 'going') {
         return jsonResponse({ ok: true, status: 'going' });
       }
