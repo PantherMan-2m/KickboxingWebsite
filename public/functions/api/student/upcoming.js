@@ -1,6 +1,7 @@
 import { jsonResponse } from '../_utils/auth.js';
 import { todayIso, addDaysIso, RSVP_WINDOW_DAYS } from '../_utils/dates.js';
 import { expandTemplates } from '../_utils/schedule.js';
+import { waitlistPosition } from '../_utils/waitlist.js';
 
 export async function onRequestGet(context) {
   const start = todayIso();
@@ -12,17 +13,17 @@ export async function onRequestGet(context) {
   ).all();
   const templateCapacityMap = new Map(templates.map((t) => [t.id, t.capacity]));
 
-  // Deliberately unfiltered on status: this row means "the student has some RSVP
-  // here", not "the student is going" -- `going` below is about to be redefined to
-  // mean status === 'going' specifically, with a separate waitlist position, once
-  // waitlisted rows exist (T3.6).
-  const { results: rsvps } = await context.env.DB.prepare(
-    `SELECT template_id AS templateId, session_date AS date FROM session_rsvps
+  // T3.6: `going` now means status === 'going' specifically, not "has any row" --
+  // a separate `rsvpStatus` (null | 'going' | 'waitlisted') carries the full
+  // three-state truth, so the UI can tell "not booked" from "waitlisted" instead
+  // of both reading as going:false.
+  const { results: myRsvps } = await context.env.DB.prepare(
+    `SELECT template_id AS templateId, session_date AS date, status FROM session_rsvps
      WHERE user_id = ? AND session_date BETWEEN ? AND ?`
   )
     .bind(context.data.user.id, dates[0], dates[dates.length - 1])
     .all();
-  const goingSet = new Set(rsvps.map((r) => `${r.templateId}|${r.date}`));
+  const myStatusMap = new Map(myRsvps.map((r) => [`${r.templateId}|${r.date}`, r.status]));
 
   // One grouped query for everyone's RSVP counts across the whole window, not one
   // COUNT(*) per row. Named `attending`, not `going` -- `going` already means "am *I*
@@ -49,19 +50,26 @@ export async function onRequestGet(context) {
     .all();
   const overrideMap = new Map(sessionOverrides.map((s) => [`${s.templateId}|${s.date}`, s.capacity]));
 
-  const upcoming = expandTemplates(templates, dates).map((e) => {
-    const key = `${e.templateId}|${e.date}`;
-    const sessionCapacity = overrideMap.get(key);
-    const capacity = sessionCapacity !== undefined && sessionCapacity !== null ? sessionCapacity : templateCapacityMap.get(e.templateId);
-    const attending = attendingMap.get(key) || 0;
-    return {
-      ...e,
-      going: goingSet.has(key),
-      capacity,
-      attending,
-      full: capacity !== null && attending >= capacity,
-    };
-  });
+  const upcoming = await Promise.all(
+    expandTemplates(templates, dates).map(async (e) => {
+      const key = `${e.templateId}|${e.date}`;
+      const sessionCapacity = overrideMap.get(key);
+      const capacity = sessionCapacity !== undefined && sessionCapacity !== null ? sessionCapacity : templateCapacityMap.get(e.templateId);
+      const attending = attendingMap.get(key) || 0;
+      const rsvpStatus = myStatusMap.get(key) || null;
+      const position =
+        rsvpStatus === 'waitlisted' ? await waitlistPosition(context.env.DB, e.templateId, e.date, context.data.user.id) : null;
+      return {
+        ...e,
+        going: rsvpStatus === 'going',
+        rsvpStatus,
+        waitlistPosition: position,
+        capacity,
+        attending,
+        full: capacity !== null && attending >= capacity,
+      };
+    })
+  );
 
   return jsonResponse({ ok: true, upcoming });
 }
