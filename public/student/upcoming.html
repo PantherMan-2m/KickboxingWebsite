@@ -61,24 +61,38 @@
     }
     upcomingBody.innerHTML = list.map((c) => {
       const spotsText = c.capacity === null ? 'Unlimited' : `${Math.max(0, c.capacity - c.attending)} left`;
-      // An already-going student always keeps a working cancel, even if the class
-      // filled up after they RSVP'd -- only a non-going student is blocked.
-      const blocked = c.full && !c.going;
-      const label = c.going ? "Going ✓ (tap to cancel)" : (blocked ? 'Full' : "I'm going");
+      // Three states: not booked, going, or waitlisted -- rsvpStatus carries the
+      // full truth (T3.6). `full` only matters for a student with no row yet;
+      // going and waitlisted both always keep a working cancel/leave button.
+      let label;
+      let going; // the boolean this button's own click sends as `going` in the RSVP body
+      if (c.rsvpStatus === 'going') {
+        label = 'Going ✓ (tap to cancel)';
+        going = false;
+      } else if (c.rsvpStatus === 'waitlisted') {
+        label = `Waitlisted — #${c.waitlistPosition} in line (tap to leave)`;
+        going = false;
+      } else if (c.full) {
+        label = 'Join waitlist';
+        going = true;
+      } else {
+        label = "I'm going";
+        going = true;
+      }
       return `
       <tr>
         <td>${c.date}</td>
         <td>${escapeHtml(c.name)}</td>
         <td>${c.startTime}${c.endTime ? ' - ' + c.endTime : ''}</td>
         <td>${spotsText}</td>
-        <td><button class="btn btn-sm" data-template-id="${c.templateId}" data-date="${c.date}" data-going="${c.going ? '0' : '1'}" ${blocked ? 'disabled' : ''}>
+        <td><button class="btn btn-sm" data-template-id="${c.templateId}" data-date="${c.date}" data-going="${going ? '1' : '0'}">
           ${label}
         </button></td>
       </tr>
     `;
     }).join('');
 
-    upcomingBody.querySelectorAll('button[data-template-id]:not([disabled])').forEach((btn) => {
+    upcomingBody.querySelectorAll('button[data-template-id]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         try {

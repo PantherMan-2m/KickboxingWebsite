@@ -21,6 +21,15 @@ export function dayOfWeekFor(dateStr) {
   return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
 }
 
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Short weekday label for notification subjects/bodies (T3.3) -- same
+// dayOfWeekFor convention (0=Sun..6=Sat), so it agrees with everywhere else a
+// date's weekday is computed.
+export function dayLabelFor(dateStr) {
+  return DAY_LABELS[dayOfWeekFor(dateStr)];
+}
+
 // The gym is in Somerset West (Africa/Johannesburg, UTC+2 fixed, no DST) but the
 // Worker's clock is UTC. Computing the calendar date straight from `new Date()`
 // returns the wrong day for roughly two hours after UTC midnight. Takes an

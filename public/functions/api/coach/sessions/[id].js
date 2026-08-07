@@ -1,6 +1,7 @@
 import { jsonResponse } from '../../_utils/auth.js';
 import { parseJsonBody } from '../../_utils/body.js';
 import { parseCapacity } from '../../_utils/capacity.js';
+import { promoteAndNotify } from '../../_utils/waitlist.js';
 
 export async function onRequestGet(context) {
   const { id } = context.params;
@@ -36,15 +37,31 @@ export async function onRequestGet(context) {
 
   // RSVPs are keyed to the weekly template + date, not this session row (students RSVP
   // before a coach ever creates the session) -- one-off sessions have no template, so
-  // there's nothing to match and every row's `going` stays false.
+  // there's nothing to match and every row's `going` stays false, and there's nobody
+  // to waitlist either (fact 4).
   let goingIds = new Set();
+  let waitlist = [];
   if (session.templateId) {
     const { results: rsvps } = await context.env.DB.prepare(
-      `SELECT user_id FROM session_rsvps WHERE template_id = ? AND session_date = ?`
+      `SELECT user_id FROM session_rsvps WHERE template_id = ? AND session_date = ? AND status = 'going'`
     )
       .bind(session.templateId, session.date)
       .all();
     goingIds = new Set(rsvps.map((r) => r.user_id));
+
+    // Queue order (created_at, user_id) -- same ordering promoteWaitlist uses, so
+    // this list is literally "who's promoted next" read top to bottom. Kept
+    // separate from `roster` so the client can't confuse a waitlisted student
+    // with someone to mark present.
+    const { results: waitlistRows } = await context.env.DB.prepare(
+      `SELECT u.id, u.name, u.email FROM session_rsvps r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.template_id = ? AND r.session_date = ? AND r.status = 'waitlisted'
+       ORDER BY r.created_at, r.user_id`
+    )
+      .bind(session.templateId, session.date)
+      .all();
+    waitlist = waitlistRows;
   }
 
   // `status: r.status || 'absent'` above collapses "no attendance row exists yet" and "a
@@ -72,6 +89,7 @@ export async function onRequestGet(context) {
       attendanceSaved: attendanceCount.n > 0,
     },
     roster: roster.map((r) => ({ ...r, status: r.status || 'absent', going: goingIds.has(r.id) })),
+    waitlist,
   });
 }
 
@@ -94,12 +112,24 @@ export async function onRequestPatch(context) {
     return jsonResponse({ ok: false, error: capacityResult.error }, { status: 400 });
   }
 
-  const result = await context.env.DB.prepare('UPDATE class_sessions SET capacity = ? WHERE id = ?')
+  // RETURNING the row's template_id/session_date in the same statement (fact 6)
+  // avoids a second SELECT to learn what to promote against -- a one-off
+  // session (template_id NULL) has no RSVPs to promote (fact 4).
+  const updated = await context.env.DB.prepare(
+    'UPDATE class_sessions SET capacity = ? WHERE id = ? RETURNING template_id, session_date'
+  )
     .bind(capacityResult.capacity, id)
-    .run();
+    .first();
 
-  if (result.meta.changes === 0) {
+  if (!updated) {
     return jsonResponse({ ok: false, error: 'Session not found' }, { status: 404 });
+  }
+
+  // T3.5 (D2): affects exactly this one date (unlike a template capacity
+  // change). Safe to call unconditionally on any successful write, including a
+  // lowered or unchanged capacity -- see the matching note in templates/[id].js.
+  if (updated.template_id) {
+    await promoteAndNotify(context, updated.template_id, updated.session_date);
   }
 
   return jsonResponse({ ok: true });
