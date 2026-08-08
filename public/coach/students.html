@@ -147,7 +147,7 @@
           <button class="btn btn-outline btn-sm" data-id="${s.id}" data-status="${s.status === 'active' ? 'inactive' : 'active'}">
             ${s.status === 'active' ? 'Deactivate' : 'Activate'}
           </button>
-          <button class="btn btn-outline btn-sm" data-plan-id="${s.id}" data-plan-name="${escapeHtml(s.name)}">
+          <button class="btn btn-outline btn-sm" data-plan-id="${s.id}" data-plan-name="${escapeHtml(s.name)}" data-current-override-cents="${s.priceOverrideCents ?? ''}">
             ${s.planName ? 'Change plan' : 'Assign plan'}
           </button>
         </td>
@@ -171,18 +171,25 @@
     });
 
     rosterBody.querySelectorAll('button[data-plan-id]').forEach((btn) => {
-      btn.addEventListener('click', () => openAssignPlanDialog(btn.dataset.planId, btn.dataset.planName));
+      btn.addEventListener('click', () => openAssignPlanDialog(
+        btn.dataset.planId,
+        btn.dataset.planName,
+        btn.dataset.currentOverrideCents === '' ? null : Number(btn.dataset.currentOverrideCents)
+      ));
     });
   }
 
-  function openAssignPlanDialog(studentId, studentName) {
+  function openAssignPlanDialog(studentId, studentName, currentOverrideCents) {
     document.getElementById('assignPlanHeading').textContent = `Assign a plan -- ${studentName}`;
     assignPlanForm.dataset.studentId = studentId;
     assignPlanSelect.innerHTML = monthlyPlans
       .map((p) => `<option value="${p.id}">${escapeHtml(p.name)} (${formatRands(p.priceCents)}/month)</option>`)
       .join('');
     document.getElementById('assignPlanStart').value = sastTodayIso();
-    document.getElementById('assignPlanOverride').value = '';
+    // Pre-fill the existing family discount rather than blanking it -- otherwise
+    // changing a discounted member's plan silently resets them to full price (finding 6).
+    document.getElementById('assignPlanOverride').value =
+      currentOverrideCents === null || currentOverrideCents === undefined ? '' : String(currentOverrideCents / 100);
     document.getElementById('assignPlanStatus').textContent = '';
     assignPlanDialog.showModal();
   }
