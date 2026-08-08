@@ -51,20 +51,50 @@ export async function onRequestPost(context) {
     return jsonResponse({ ok: false, error: 'Only a month plan can back a membership' }, { status: 400 });
   }
 
+  // Review triage finding 4: 0005 gave `payments` a CHECK(covers_end >= covers_start)
+  // but no equivalent ordering guard exists for memberships, so a backdated start_date
+  // could close the current open membership's end_date before its own start_date --
+  // an inverted range. SQLite can't ALTER TABLE ADD CONSTRAINT without a full rebuild
+  // (disproportionate for this), so the guard lives here instead, where the error
+  // message is useful anyway.
+  const currentOpen = await context.env.DB.prepare(
+    `SELECT start_date AS startDate FROM memberships WHERE user_id = ? AND end_date IS NULL`
+  )
+    .bind(userId)
+    .first();
+  const dayBeforeStart = addDaysIso(startDate, -1);
+  if (currentOpen && dayBeforeStart < currentOpen.startDate) {
+    return jsonResponse(
+      { ok: false, error: 'start_date cannot be before the current membership started' },
+      { status: 400 }
+    );
+  }
+
   // A student has at most one open (end_date IS NULL) membership at a time --
   // close it to the day before the new one starts, in the same request as the
-  // insert, so there is never a window with two open rows.
-  const dayBeforeStart = addDaysIso(startDate, -1);
-  await context.env.DB.prepare(`UPDATE memberships SET end_date = ? WHERE user_id = ? AND end_date IS NULL`)
-    .bind(dayBeforeStart, userId)
-    .run();
-
+  // insert, so there is never a window with two open rows. Review triage finding 5:
+  // these were previously two separate un-batched statements, so two concurrent
+  // requests could each close the same old row and then both insert, leaving two
+  // open rows. env.DB.batch() runs both as one all-or-nothing transaction (same
+  // precedent as coach/mark-attendance.js:37-39); migration 0006's partial unique
+  // index (idx_memberships_one_open) is the DB-level backstop -- the losing side of
+  // a race violates that constraint and is caught below as a 409, not a bare 500.
   const id = crypto.randomUUID();
-  await context.env.DB.prepare(
+  const closeStmt = context.env.DB.prepare(
+    `UPDATE memberships SET end_date = ? WHERE user_id = ? AND end_date IS NULL`
+  ).bind(dayBeforeStart, userId);
+  const insertStmt = context.env.DB.prepare(
     `INSERT INTO memberships (id, user_id, plan_id, start_date, price_override_cents, created_by) VALUES (?, ?, ?, ?, ?, ?)`
-  )
-    .bind(id, userId, planId, startDate, overrideCents, context.data.user.id)
-    .run();
+  ).bind(id, userId, planId, startDate, overrideCents, context.data.user.id);
+
+  try {
+    await context.env.DB.batch([closeStmt, insertStmt]);
+  } catch (error) {
+    if (String(error.message || error).includes('UNIQUE constraint failed')) {
+      return jsonResponse({ ok: false, error: 'Another plan change for this student is already in progress. Please retry.' }, { status: 409 });
+    }
+    throw error;
+  }
 
   return jsonResponse({
     ok: true,
