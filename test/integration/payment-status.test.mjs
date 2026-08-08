@@ -115,6 +115,24 @@ test('last covered through the previous month: "paid" on grace day 7, "overdue" 
   assert.equal(day8.get('ps-grace-boundary'), 'overdue', 'one day past the grace boundary flips to overdue');
 });
 
+// Review triage finding 2: the WHERE only filtered m.end_date IS NULL, never
+// m.start_date <= today, so a membership scheduled to start in the future (e.g. a
+// coach pre-assigning next month's plan) read as "paid" via the D4 COALESCE fallback
+// -- the member hasn't started yet, so per D6 they have no *active* membership.
+test('a membership that has not started yet is "none", not "paid" (finding 2)', async () => {
+  await createStudent('ps-future-start');
+  await createMembership('mem-future-start', 'ps-future-start', { startDate: addDaysIso(TODAY, 10) });
+  const statuses = await paymentStatusForRoster(db, ['ps-future-start'], TODAY);
+  assert.equal(statuses.get('ps-future-start'), 'none');
+});
+
+test('a membership starting exactly today is "paid" (boundary, finding 2)', async () => {
+  await createStudent('ps-starts-today');
+  await createMembership('mem-starts-today', 'ps-starts-today', { startDate: TODAY });
+  const statuses = await paymentStatusForRoster(db, ['ps-starts-today'], TODAY);
+  assert.equal(statuses.get('ps-starts-today'), 'paid');
+});
+
 test('a membership with end_date in the past is "none", regardless of payments', async () => {
   await createStudent('ps-ended-membership');
   await createMembership('mem-ended', 'ps-ended-membership', {

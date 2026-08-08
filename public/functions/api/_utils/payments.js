@@ -37,12 +37,31 @@ export async function paymentStatusForRoster(db, userIds, today = todayIso()) {
   const placeholders = userIds.map(() => '?').join(',');
   const { results } = await db
     .prepare(
+      // Finding 2 (review triage): a membership that has not started yet must read
+      // 'none', not 'paid' via the D4 COALESCE fallback -- D6 defines "no active
+      // membership" as including one that hasn't started.
+      //
+      // Finding 1 (review triage) -- deliberately NOT scoped to the membership stint,
+      // e.g. `p.covers_start >= m.start_date`. Real, but the fix is rejected, for two
+      // independent reasons:
+      // 1. It regresses a more common case than the one it targets: member pays for
+      //    August (covers_start 08-01, covers_end 08-31), coach upgrades them to a new
+      //    plan on 08-15 (old membership closes 08-14, new one starts 08-15). Scoping
+      //    to `p.covers_start >= m.start_date` excludes the August payment, so the
+      //    member reads 'overdue' immediately after an upgrade, having paid.
+      // 2. The case it targets -- a member who paid ahead, lapsed, and re-enrolled,
+      //    keeping stale prepaid credit -- needs a payment whose covers_end is far in
+      //    the future, which cannot currently be created. Giovanni confirmed
+      //    2026-08-08: billing is one month at a time, no multi-month prepayment. The
+      //    edge is real in the abstract and unreachable in practice today.
+      // Revisit only if multi-month prepayment is ever built (see plan/phase-4.md's
+      // "Deactivation, reactivation, and freezing" section).
       `SELECT m.user_id AS userId, m.start_date AS startDate,
               (SELECT MAX(p.covers_end) FROM payments p WHERE p.user_id = m.user_id) AS maxCoversEnd
        FROM memberships m
-       WHERE m.user_id IN (${placeholders}) AND m.end_date IS NULL`
+       WHERE m.user_id IN (${placeholders}) AND m.end_date IS NULL AND m.start_date <= ?`
     )
-    .bind(...userIds)
+    .bind(...userIds, today)
     .all();
 
   const threshold = addDaysIso(today, -PAYMENT_GRACE_DAYS);
