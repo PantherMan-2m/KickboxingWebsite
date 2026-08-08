@@ -152,6 +152,24 @@ D1 exports with real password hashes — **never let this be staged**). See
 `HANDOVER.md`'s "Repo layout" section for the full current state, including the two-step
 rollback this creates (`stable-phase3` has the *old* layout).
 
+## Phase 4 review triage (2026-08-08) — logged, not fixed
+`/code-review ultra` on `phase-4-payments` found 6 real findings
+(`reports/phase-4-review-triage.md`); 5 were fixed on the branch. Two items were ranked
+out of scope for that fix pass and kept here instead of expanding the branch:
+- **Finding 3b — 8 more `(x || '').trim()` sites**, the same crash-on-non-string-truthy
+  bug as finding 3a (fixed at `coach/plans.js`/`coach/plans/[id].js`'s `name` field) and
+  the same family as this file's unguarded-handler entry above, but pre-existing and out
+  of Phase 4's scope: `auth/login.js:21`, `auth/request-account.js:14`,
+  `auth/request-account.js:15`, `coach/sessions.js:82`, `coach/students.js:28`,
+  `coach/students.js:29`, `coach/templates.js:21`, `coach/templates.js:22`.
+- **Finding 1 — `_utils/payments.js`'s `MAX(covers_end)` subquery is not scoped to the
+  membership stint.** Real, but the fix is rejected: scoping it regresses a more common
+  case (a mid-month plan upgrade would read `overdue` immediately after upgrading,
+  having paid), and the case the scoping targets (lapse-then-rejoin with stale prepaid
+  credit) needs multi-month prepayment, which doesn't exist -- confirmed by Giovanni
+  2026-08-08 that billing is one month at a time. See the comment at that line for both
+  reasons in full. Revisit only if multi-month prepayment is ever built.
+
 ## Low priority / nice-to-have
 - Instagram social link is still a placeholder (`href="#"`) — no URL provided yet.
 - Two coach photo filenames still contain spaces (`Cristiano marketing.png`, `Giovanni marketing

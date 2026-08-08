@@ -465,6 +465,40 @@ that exclusion cannot be applied to it.** The fix is ordering, not filtering:
 
 ---
 
+## Deactivation, reactivation, and "freezing" — verified 2026-08-08
+
+Raised by Giovanni at the review-triage stage. Recorded here because the answer is
+non-obvious and the next session should not re-derive it.
+
+**Reactivating a student already works, in both directions.** It is a single toggle:
+`api/coach/students/[id].js:12` accepts `status` of `'active'` or `'inactive'`
+symmetrically, and `coach/students.html:147-148` renders one button that flips its label
+between "Deactivate" and "Activate". Inactive students stay findable via the status filter
+at `students.html:53-54` — without it they would be invisible and unreactivatable.
+
+**Deactivation does not touch memberships.** The PATCH only writes `users.status`. The
+membership row stays open (`end_date IS NULL`). Two consequences, both benign and both
+worth knowing:
+
+1. While inactive, the student vanishes from the attendance roster entirely — the roster
+   query filters `u.status = 'active'` (`coach/sessions/[id].js:32`) — so no payment badge
+   is rendered for them at all. Deactivation effectively suppresses the flag rather than
+   needing to clear it.
+2. On reactivation, the membership is still open with its original `start_date` and no
+   recent payments, so the student immediately reads **`overdue`**. That is the correct
+   outcome: they are back, and they owe for the current month.
+
+**"Freezing" prepaid months is NOT representable in the current model, and is not built.**
+Coverage is a wall-clock date range (`covers_start` … `covers_end`), so a member who paid
+through December and is deactivated in September does not have that coverage suspended — it
+simply expires while they are away. Supporting a freeze would need either a manual
+extension of `covers_end` on return, or a credit-balance model (N months banked) instead of
+date ranges, which is a different schema.
+
+This is deliberately deferred, not overlooked: Giovanni confirmed the same day that
+multi-month prepayment does not currently happen, so nothing can be frozen yet. **Revisit
+only if that changes** — and if it does, treat it as a schema question, not a UI one.
+
 ## Carried into Phase 5
 
 Phase 5 (attendance intelligence) is where `allowance_per_period` (D7) stops being dormant:
