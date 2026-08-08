@@ -30,10 +30,12 @@ export async function onRequestPatch(context) {
   const binds = [];
 
   if (hasName) {
-    const name = (body.name || '').trim();
-    if (!name) {
+    // Finding 3a (review triage): same (body.name || '').trim() bug as plans.js's POST --
+    // a non-string, truthy name crashed .trim() with a bare 500 instead of a 400.
+    if (typeof body.name !== 'string' || !body.name.trim()) {
       return jsonResponse({ ok: false, error: 'name cannot be empty' }, { status: 400 });
     }
+    const name = body.name.trim();
     sets.push('name = ?');
     binds.push(name);
   }

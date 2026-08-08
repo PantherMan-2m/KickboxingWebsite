@@ -83,6 +83,20 @@ test('PATCH updates each field independently', async () => {
   assert.equal(row.active, 0);
 });
 
+// Finding 3a (review triage): coach/plans.js:20 did `(body.name || '').trim()`, so a
+// non-string, truthy name (e.g. a number) skipped the `|| ''` fallback and crashed
+// `.trim()` with an uncaught TypeError -- a bare 500 instead of a 400. Same family as
+// TODO.md's pre-existing unguarded-handler entry; membership.js:19 already guards its
+// plan_id the same way this fixes name.
+test('POST rejects a non-string name with a 400, not a bare 500', async () => {
+  const res = await authedFetch('/api/coach/plans', {
+    method: 'POST',
+    body: JSON.stringify({ name: 12345, price_cents: 10000, period: 'month' }),
+  });
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).ok, false);
+});
+
 test('POST rejects a float price and a negative price', async () => {
   for (const price_cents of [199.99, -100]) {
     const res = await authedFetch('/api/coach/plans', {
@@ -92,6 +106,17 @@ test('POST rejects a float price and a negative price', async () => {
     assert.equal(res.status, 400, `expected 400 for price_cents=${price_cents}`);
     assert.equal((await res.json()).ok, false);
   }
+});
+
+// Finding 3a (review triage): plans/[id].js:33 had the same (body.name || '').trim()
+// bug on the PATCH path.
+test('PATCH rejects a non-string name with a 400, not a bare 500', async () => {
+  const res = await authedFetch('/api/coach/plans/plan_weekly', {
+    method: 'PATCH',
+    body: JSON.stringify({ name: 12345 }),
+  });
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).ok, false);
 });
 
 test('PATCH rejects a period change', async () => {

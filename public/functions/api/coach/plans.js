@@ -17,10 +17,13 @@ export async function onRequestPost(context) {
   }
   const body = parsed.body;
 
-  const name = (body.name || '').trim();
-  if (!name) {
+  // Finding 3a (review triage): a non-string, truthy name (e.g. a number) skipped the
+  // `|| ''` fallback and crashed .trim() with an uncaught TypeError -- a bare 500
+  // instead of a 400. Same guard style as membership.js:19's plan_id check.
+  if (typeof body.name !== 'string' || !body.name.trim()) {
     return jsonResponse({ ok: false, error: 'name is required' }, { status: 400 });
   }
+  const name = body.name.trim();
 
   const priceResult = parsePriceCents(body.price_cents);
   if (!priceResult.ok) {
