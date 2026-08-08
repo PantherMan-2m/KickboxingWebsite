@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../styles.css?v=4" />
+  <link rel="stylesheet" href="../styles.css?v=5" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
 </head>
 <body>
@@ -23,6 +23,7 @@
       <a href="/coach/requests.html">Requests</a>
       <a href="/coach/templates.html">Schedule</a>
       <a href="/coach/attendance.html">Attendance</a>
+      <a href="/coach/payments.html">Payments</a>
       <a href="#" id="logoutLink">Log out</a>
     </nav>
   </div>
@@ -57,11 +58,19 @@
   </div>
 </footer>
 
-<script src="/app.js?v=2"></script>
+<script src="/app.js?v=3"></script>
 <script>
   const sessionId = new URLSearchParams(window.location.search).get('id');
   const rosterContainer = document.getElementById('rosterContainer');
   const statuses = ['present', 'absent', 'excused'];
+
+  // D6: three states, informational only -- 'none' is deliberately not styled as a
+  // warning (a drop-in/brand-new student isn't a problem). The word is included
+  // alongside colour so the badge doesn't rely on colour alone.
+  function paymentBadge(status) {
+    const labels = { paid: 'Paid', overdue: 'Overdue', none: 'No plan' };
+    return `<span class="pay-badge pay-badge--${status}">${labels[status] || labels.none}</span>`;
+  }
 
   // Refreshes only the capacity display (used after saving the capacity override) --
   // deliberately does not touch rosterContainer, since re-rendering the roster would
@@ -104,7 +113,7 @@
         <div class="card" style="margin-top:16px">
           <p><strong>Waitlisted (${data.waitlist.length})</strong></p>
           <ol>
-            ${data.waitlist.map((w) => `<li>${escapeHtml(w.name)}</li>`).join('')}
+            ${data.waitlist.map((w) => `<li>${escapeHtml(w.name)} ${paymentBadge(w.paymentStatus)}</li>`).join('')}
           </ol>
         </div>
       `
@@ -130,7 +139,7 @@
             const effectiveStatus = usePrefill ? (s.going ? 'present' : 'absent') : s.status;
             return `
             <tr data-user-id="${s.id}">
-              <td>${escapeHtml(s.name)}</td>
+              <td>${escapeHtml(s.name)} ${paymentBadge(s.paymentStatus)}</td>
               <td>${s.going ? '✓ Going' : ''}</td>
               ${statuses.map((st) => `
                 <td style="text-align:center">

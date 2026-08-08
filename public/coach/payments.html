@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Payments · CJN Boxing Academy</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css?v=5" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+<header class="site-header">
+  <div class="container nav">
+    <a class="logo" href="/">🥊 CJN Boxing / Kick Boxing / Muay Thai </a>
+    <button class="menu-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="primary-nav">☰</button>
+    <nav id="primary-nav" class="nav-links">
+      <a href="/">Home</a>
+      <a href="/coach/dashboard.html">Dashboard</a>
+      <a href="/coach/students.html">Students</a>
+      <a href="/coach/requests.html">Requests</a>
+      <a href="/coach/templates.html">Schedule</a>
+      <a href="/coach/attendance.html">Attendance</a>
+      <a href="/coach/payments.html">Payments</a>
+      <a href="#" id="logoutLink">Log out</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="container section">
+    <h2>Record a payment</h2>
+    <form id="recordPaymentForm" class="card form" style="max-width:420px">
+      <label for="paymentStudent">Student</label>
+      <select id="paymentStudent" required></select>
+
+      <label for="paymentPlan">Plan (optional)</label>
+      <select id="paymentPlan">
+        <option value="">-- none --</option>
+      </select>
+
+      <label for="paymentAmount">Amount (Rands)</label>
+      <input id="paymentAmount" type="number" min="0.01" step="0.01" required />
+
+      <label for="paymentMethod">Method</label>
+      <select id="paymentMethod" required>
+        <option value="cash">Cash</option>
+        <option value="eft">EFT</option>
+      </select>
+
+      <label for="paymentPaidOn">Paid on</label>
+      <input id="paymentPaidOn" type="date" required />
+
+      <label for="paymentCoversStart">Covers from</label>
+      <input id="paymentCoversStart" type="date" required />
+
+      <label for="paymentCoversEnd">Covers to</label>
+      <input id="paymentCoversEnd" type="date" required />
+
+      <label for="paymentNote">Note (optional)</label>
+      <input id="paymentNote" type="text" placeholder="e.g. reference number" />
+
+      <button class="btn" type="submit">Record payment</button>
+      <p class="form-status" id="paymentFormStatus" role="status"></p>
+    </form>
+  </section>
+
+  <section class="container section">
+    <h2>Recent payments</h2>
+    <div class="scroll-x">
+      <table class="schedule" id="ledgerTable">
+        <thead>
+          <tr><th>Date</th><th>Student</th><th>Plan</th><th>Amount</th><th>Method</th><th>Covers</th><th>Note</th></tr>
+        </thead>
+        <tbody id="ledgerBody">
+          <tr><td colspan="7">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="container section">
+    <h2>Membership plans</h2>
+    <div class="scroll-x">
+      <table class="schedule" id="plansTable">
+        <thead>
+          <tr><th>Name</th><th>Price</th><th>Allowance</th><th>Period</th><th>Active</th><th></th></tr>
+        </thead>
+        <tbody id="plansBody">
+          <tr><td colspan="6">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Add a plan</h3>
+    <form id="addPlanForm" class="card form" style="max-width:420px">
+      <label for="newPlanName">Name</label>
+      <input id="newPlanName" type="text" required />
+
+      <label for="newPlanPrice">Price (Rands)</label>
+      <input id="newPlanPrice" type="number" min="0" step="0.01" required />
+
+      <label for="newPlanAllowance">Allowance per period (blank = unlimited)</label>
+      <input id="newPlanAllowance" type="number" min="1" step="1" />
+
+      <label for="newPlanPeriod">Period</label>
+      <select id="newPlanPeriod" required>
+        <option value="month">Month</option>
+        <option value="session">Session</option>
+      </select>
+
+      <button class="btn" type="submit">Add plan</button>
+      <p class="form-status" id="addPlanStatus" role="status"></p>
+    </form>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© <span id="year"></span> CJN Boxing Academy · Somerset West, South Africa</p>
+  </div>
+</footer>
+
+<script src="/app.js?v=3"></script>
+<script>
+  const paymentStudent = document.getElementById('paymentStudent');
+  const paymentPlan = document.getElementById('paymentPlan');
+  const ledgerBody = document.getElementById('ledgerBody');
+  const plansBody = document.getElementById('plansBody');
+
+  // Calendar-month billing (fact 3, plan/phase-4.md) -- default the covers range
+  // to the current calendar month, not a rolling 30 days.
+  function currentMonthRange() {
+    const today = sastTodayIso();
+    const [y, m] = today.split('-').map(Number);
+    const first = `${y}-${String(m).padStart(2, '0')}-01`;
+    const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    return { first, last };
+  }
+
+  async function loadStudents() {
+    const { data } = await fetchJson('/api/coach/students');
+    if (!data.ok) return;
+    paymentStudent.innerHTML = data.students
+      .map((s) => `<option value="${s.id}">${escapeHtml(s.name)}${s.status !== 'active' ? ' (' + s.status + ')' : ''}</option>`)
+      .join('');
+  }
+
+  async function loadPlansIntoSelect() {
+    const { data } = await fetchJson('/api/coach/plans');
+    if (!data.ok) return;
+    paymentPlan.innerHTML =
+      '<option value="">-- none --</option>' +
+      data.plans.map((p) => `<option value="${p.id}">${escapeHtml(p.name)} (${formatRands(p.priceCents)})</option>`).join('');
+    return data.plans;
+  }
+
+  async function loadLedger() {
+    const { data } = await fetchJson('/api/coach/payments');
+    if (!data.ok) {
+      ledgerBody.innerHTML = `<tr><td colspan="7">${escapeHtml(data.error || 'Could not load payments.')}</td></tr>`;
+      return;
+    }
+    if (data.payments.length === 0) {
+      ledgerBody.innerHTML = '<tr><td colspan="7">No payments recorded yet.</td></tr>';
+      return;
+    }
+    ledgerBody.innerHTML = data.payments
+      .map(
+        (p) => `
+      <tr>
+        <td>${p.paidOn}</td>
+        <td>${escapeHtml(p.userName)}</td>
+        <td>${p.planName ? escapeHtml(p.planName) : '—'}</td>
+        <td>${formatRands(p.amountCents)}</td>
+        <td>${p.method}</td>
+        <td>${p.coversStart} – ${p.coversEnd}</td>
+        <td>${p.note ? escapeHtml(p.note) : ''}</td>
+      </tr>
+    `
+      )
+      .join('');
+  }
+
+  async function loadPlansTable() {
+    const { data } = await fetchJson('/api/coach/plans');
+    if (!data.ok) {
+      plansBody.innerHTML = `<tr><td colspan="6">${escapeHtml(data.error || 'Could not load plans.')}</td></tr>`;
+      return;
+    }
+    plansBody.innerHTML = data.plans
+      .map(
+        (p) => `
+      <tr data-plan-id="${p.id}">
+        <td>${escapeHtml(p.name)}</td>
+        <td>${formatRands(p.priceCents)}</td>
+        <td>${p.allowancePerPeriod === null ? 'Unlimited' : p.allowancePerPeriod}</td>
+        <td>${p.period}</td>
+        <td>${p.active ? 'Active' : 'Inactive'}</td>
+        <td><button class="btn btn-outline btn-sm" data-toggle-active="${p.id}" data-next="${p.active ? 0 : 1}">
+          ${p.active ? 'Deactivate' : 'Activate'}
+        </button></td>
+      </tr>
+    `
+      )
+      .join('');
+
+    plansBody.querySelectorAll('button[data-toggle-active]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          await fetchJson(`/api/coach/plans/${btn.dataset.toggleActive}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active: btn.dataset.next === '1' }),
+          });
+          await Promise.all([loadPlansTable(), loadPlansIntoSelect()]);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  document.getElementById('recordPaymentForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('paymentFormStatus');
+    const submitButton = e.target.querySelector('button[type="submit"]');
+
+    status.textContent = 'Saving…';
+    submitButton.disabled = true;
+
+    try {
+      const { response, data } = await fetchJson('/api/coach/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: paymentStudent.value,
+          plan_id: paymentPlan.value || null,
+          amount_cents: Math.round(Number(document.getElementById('paymentAmount').value) * 100),
+          method: document.getElementById('paymentMethod').value,
+          paid_on: document.getElementById('paymentPaidOn').value,
+          covers_start: document.getElementById('paymentCoversStart').value,
+          covers_end: document.getElementById('paymentCoversEnd').value,
+          note: document.getElementById('paymentNote').value || undefined,
+        }),
+      });
+
+      if (!response?.ok || !data.ok) {
+        status.textContent = data.error || 'Could not record payment.';
+        return;
+      }
+
+      status.textContent = 'Payment recorded.';
+      document.getElementById('paymentNote').value = '';
+      await loadLedger();
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  document.getElementById('addPlanForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('addPlanStatus');
+    const submitButton = e.target.querySelector('button[type="submit"]');
+    const allowanceValue = document.getElementById('newPlanAllowance').value;
+
+    status.textContent = 'Saving…';
+    submitButton.disabled = true;
+
+    try {
+      const { response, data } = await fetchJson('/api/coach/plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: document.getElementById('newPlanName').value,
+          price_cents: Math.round(Number(document.getElementById('newPlanPrice').value) * 100),
+          allowance_per_period: allowanceValue === '' ? null : Number(allowanceValue),
+          period: document.getElementById('newPlanPeriod').value,
+        }),
+      });
+
+      if (!response?.ok || !data.ok) {
+        status.textContent = data.error || 'Could not add plan.';
+        return;
+      }
+
+      status.textContent = 'Plan added.';
+      e.target.reset();
+      await Promise.all([loadPlansTable(), loadPlansIntoSelect()]);
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  (async () => {
+    const { first, last } = currentMonthRange();
+    document.getElementById('paymentPaidOn').value = sastTodayIso();
+    document.getElementById('paymentCoversStart').value = first;
+    document.getElementById('paymentCoversEnd').value = last;
+
+    await Promise.all([loadStudents(), loadPlansIntoSelect(), loadPlansTable(), loadLedger()]);
+  })();
+</script>
+</body>
+</html>

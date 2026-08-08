@@ -10,6 +10,12 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// D1: money is integer cents everywhere on the server; Rand formatting happens only
+// here, at display time (Phase 4 -- membership plans/payments).
+function formatRands(cents) {
+  return 'R' + (cents / 100).toFixed(2);
+}
+
 // The gym is in Somerset West (Africa/Johannesburg, UTC+2 fixed, no DST), but a visiting
 // coach's browser could be set to any timezone. Mirrors _utils/dates.js's todayIso() --
 // same fixed +2 offset -- so "today" agrees between server and client. Duplicated rather
