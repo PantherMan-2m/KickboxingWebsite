@@ -197,6 +197,12 @@ independent. So:
   or account security: **Phase 4** (payments), **Phase 7** (account safety), **Phase 8** (the
   first unauthenticated write endpoint). Anywhere else, ask before spending it.
 - User-triggered and billed; an agent cannot launch it.
+- **On a reserved-review phase, apply the production migration *after* the review, not before**
+  (added 2026-08-08, after Phase 4 got this backwards). A schema finding is an edit to an
+  unapplied `.sql` file if the review comes first, and a corrective migration against a live
+  table if it comes second. Phase 3's order is the model — review → fix → merge → migrate →
+  deploy. Phase 4's spec inverted it and the migration went to production pre-review; it cost
+  nothing only because both new tables were still empty. **Phases 7 and 8 must not repeat it.**
 - **The `reports/` exclusion cannot be applied to `ultra`** (noted 2026-08-07, planning Phase 4):
   the no-arg form bundles the whole local branch, so there is no diff to filter. On a reserved
   phase, get the independence by **ordering** instead — run `ultra` while the branch is green
