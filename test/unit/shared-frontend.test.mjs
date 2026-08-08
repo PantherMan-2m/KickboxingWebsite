@@ -23,6 +23,7 @@ const PAGES = [
   'coach/session.html',
   'coach/students.html',
   'coach/templates.html',
+  'coach/payments.html',
   'student/dashboard.html',
   'student/upcoming.html',
 ];
