@@ -1,10 +1,11 @@
 # Coach/Student Login & Attendance System — Usage Guide
 
 **Status**: self-signup + approval, class RSVPs, shared `app.js` + navigation fixes,
-class capacity + RSVP enforcement (`PLAN.md`'s Phase 2), and a waitlist + coach
-notifications (Phase 3) all complete as of 2026-08-07 — see `HANDOVER.md` for current
-branch state. This is a living document — update it (don't replace it) as new features
-land. See `TODO.md` (outer folder) for what's not built yet.
+class capacity + RSVP enforcement (`PLAN.md`'s Phase 2), a waitlist + coach
+notifications (Phase 3), and membership plans + payment recording + an overdue flag
+(Phase 4) all complete as of 2026-08-08 — see `HANDOVER.md` for current branch state.
+This is a living document — update it (don't replace it) as new features land. See
+`TODO.md` (outer folder) for what's not built yet.
 
 This is the plain-English usage guide. For schema, endpoints, and security mechanics,
 see **`coach-student-system-technical.md`** in this same folder.
@@ -96,11 +97,35 @@ back, follow up with a coach directly.
    immediately — no separate action needed. Both the promoted student and you get an
    email. Lowering capacity never removes anyone already going, even if that puts the
    class over the new number.
+8. **Assigning a membership plan** (`/coach/students.html`) — each student row shows
+   their current plan (or "No plan") with an **Assign plan** / **Change plan** button.
+   Only the two monthly plans (One Class / week, Unlimited) can be assigned this way —
+   Drop-in is paid for per visit, not enrolled in, so it never shows up here. Changing a
+   student's plan automatically closes their previous one the day before the new plan
+   starts; there's never more than one active plan per student. The optional **price
+   override** is for a family discount — leave it blank to charge the plan's normal
+   price.
+9. **Recording a payment** (`/coach/payments.html`) — pick the student, optionally the
+   plan it's for, the amount (in Rands — the amount you actually received), cash or EFT,
+   the date it was paid, and the period it covers (defaults to the current calendar
+   month). This is a record-only ledger: the site never takes money itself, it just
+   tracks what you were handed. The same page also has the **membership plan catalogue**
+   — add a new plan or deactivate one that's no longer offered (deactivating a plan
+   doesn't touch anyone already on it).
+10. **Reading the payment badge** — every student on a class roster (and on the
+    waitlist) shows a small badge: **Paid**, **Overdue**, or **No plan**. "No plan"
+    covers drop-in-only students and brand-new members who haven't paid yet — it's
+    informational, not a warning. "Overdue" means their last payment's coverage plus a
+    7-day grace period has passed. **The badge is informational only** — it doesn't stop
+    anyone from RSVPing, joining a waitlist, or being auto-promoted off one; there's no
+    enforcement anywhere. Students can see their own plan, price, and payment history on
+    their own dashboard (`/student/dashboard.html`).
 
 ## Student walkthrough
 
-Log in → lands on `/student/dashboard.html` → see a table of every session you've been
-marked in, with date, class name, and status. The **Upcoming classes**
+Log in → lands on `/student/dashboard.html` → see **My membership** (your current plan,
+its price, a Paid/Overdue/No plan badge, and your payment history) above a table of
+every session you've been marked in, with date, class name, and status. The **Upcoming classes**
 (`/student/upcoming.html`) nav link shows the next 7 days of recurring weekly classes,
 each with a spots-remaining count and an "I'm going" button — tap it to RSVP, tap again
 to cancel. This is a heads-up for the coach; it doesn't create or replace an actual

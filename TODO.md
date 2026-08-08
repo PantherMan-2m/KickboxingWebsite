@@ -67,17 +67,14 @@ in `reports/phase-0-completion.md`. Summary:
 
 ### Logged, not fixed (from the 2026-08-05 code review)
 - **Systemic**: every Pages Function handler that does `body.foo` or destructures a
-  parsed JSON body right after `context.request.json()` — 10 more files beyond the one
-  fixed in `rsvp.js` (`api/coach/sessions.js`, `api/coach/requests/[id].js`,
-  `api/auth/request-account.js`, `api/coach/mark-attendance.js`,
-  `api/coach/templates/[id].js`, `api/coach/templates.js`, `api/coach/students/[id].js`,
-  `api/coach/students.js`, `api/auth/change-password.js`, `api/auth/login.js`) — will
+  parsed JSON body right after `context.request.json()` without `parseJsonBody` — will
   throw an uncaught `TypeError` and return a bare 500 instead of a graceful 400 if the
   request body is a literal JSON `null` (valid JSON, not a `.json()` parse error, so the
-  existing `try/catch` around the parse doesn't catch it). Only `rsvp.js` was fixed, since
-  that's the one file this session's diff actually touched. Worth a small shared
-  `parseJsonBody(context)` helper (parse + null/type guard in one place) next time any of
-  these files is touched, rather than patching all 11 in one pass now.
+  existing `try/catch` around the parse doesn't catch it). Fixed file-by-file as phases
+  open them (T2.0 fixed `templates.js`/`templates/[id].js`/`sessions.js`/`rsvp.js`; T4.4
+  fixed `api/coach/students/[id].js`, discharging it from this list). Six remain:
+  `api/coach/students.js`, `api/coach/requests/[id].js`, `api/coach/mark-attendance.js`,
+  `api/auth/login.js`, `api/auth/change-password.js`, `api/auth/request-account.js`.
 - **`test/helpers/server.mjs`'s `resetAndSeed()`** (`test/helpers/server.mjs:41`) shells
   out to a whole separate `node scripts/db-reset-seed.js` process instead of importing
   and calling that logic in-process — pays a full Node bootstrap on every integration

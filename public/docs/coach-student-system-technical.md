@@ -108,10 +108,11 @@ are now version-controlled; `Server.js` and `bootstrap-user.js` are also tracked
   (`test/helpers/server.mjs`) — this makes any single file runnable standalone
   (`node --test test/integration/rsvp.test.mjs`) for debugging, at the cost of the full
   suite needing serial file execution (`--test-concurrency=1`, already set in the `test`
-  script) so two files' servers never collide on the same port. This is why the full
-  suite takes ~2 minutes — each integration file pays its own ~5-10s server-startup cost.
-  Coverage: login, lockout, all five route-protection middlewares, RSVP, and
-  `/api/auth/session`.
+  script) so two files' servers never collide on the same port. Each integration file
+  pays its own ~5-10s server-startup cost; the full suite (160 tests as of Phase 4, up
+  from 115) takes roughly 11 minutes. Coverage: login, lockout, all five
+  route-protection middlewares, RSVP, `/api/auth/session`, and (Phase 4) plans,
+  memberships, payments, and the roster/waitlist overdue flag.
 - `test/helpers/auth.mjs` — the shared `login(email, password)` helper every integration
   test file uses; returns `{res, cookie}`, callers read the body themselves.
 - `test/unit/shared-frontend.test.mjs` — grep-shaped check (T1.1) that all 12 pages
@@ -150,7 +151,8 @@ environment" above for why it spawns `wrangler` directly via `node <wrangler.js>
 ## Database schema
 
 Full DDL lives in `migrations/0001_initial.sql`, `migrations/0002_session_rsvps.sql`,
-`migrations/0003_class_capacity.sql`, and `migrations/0004_rsvp_status.sql`. Six tables:
+`migrations/0003_class_capacity.sql`, `migrations/0004_rsvp_status.sql`, and
+`migrations/0005_memberships_payments.sql`. Nine tables:
 
 - **`users`** — coaches and students both live here, distinguished by `role` ('coach'/
   'student'). `status` ('active'/'inactive'/'pending' — 'pending' is a self-signup
@@ -206,6 +208,49 @@ Full DDL lives in `migrations/0001_initial.sql`, `migrations/0002_session_rsvps.
   re-check, the cancel DELETE) are deliberately unfiltered — they need to find a row
   regardless of its status, for logic rather than counting. See "Waitlist and
   notifications" below for the full behaviour.
+- **`membership_plans`** (`0005`, Phase 4) — the catalogue: `id` (fixed seed ids
+  `plan_dropin`/`plan_weekly`/`plan_unlimited`), `name`, `price_cents` (INTEGER, never a
+  float), `allowance_per_period` (nullable -- `NULL` means unlimited; stored but read by
+  nothing until Phase 5's over-limit logic), `period` (`'month'` or `'session'`,
+  immutable after creation), `active`. Deactivating a plan (`active=0`) never touches
+  existing `memberships` rows that reference it.
+- **`memberships`** (`0005`) -- one row per enrollment period: `user_id`, `plan_id`
+  (must be a `period='month'` plan -- a `CHECK` plus an application-level guard in the
+  assignment endpoint both enforce this), `start_date`, `end_date` (`NULL` = currently
+  active), `price_override_cents` (nullable -- the per-member family discount).
+  **Deliberate asymmetry**: there is no `status` column -- an ended membership is simply
+  one with `end_date` set, so there's one source of truth instead of two that could
+  disagree. A student has at most one row with `end_date IS NULL` at a time; assigning a
+  new plan closes the previous open row (`end_date` = the day before the new
+  `start_date`) in the same request that inserts the new one.
+- **`payments`** (`0005`) -- a record-only ledger, never a live charge: `user_id`,
+  `plan_id` (nullable -- informational, not a foreign key into `memberships`),
+  `amount_cents` (INTEGER, `> 0`), `method` (`'cash'` or `'eft'` -- a deliberately
+  widenable `CHECK` list, no speculative gateway columns), `paid_on` (when the money
+  actually arrived), `covers_start`/`covers_end` (inclusive, `covers_end >= covers_start`
+  enforced by `CHECK`), `note` (free text -- absorbs a reference number if one exists),
+  `recorded_by` (the coach who typed it in -- always taken from the session, never from
+  the request body).
+
+  **The overdue rule, computed and never stored** (`_utils/payments.js`,
+  `paymentStatusForRoster`): for a user's current open membership,
+  `effective_paid_through = COALESCE(MAX(payments.covers_end), date(start_date, '-1 day'))`,
+  and `overdue = effective_paid_through < today - PAYMENT_GRACE_DAYS days`
+  (`PAYMENT_GRACE_DAYS = 7`, hardcoded and commented, not configurable -- a member has
+  until the 7th of the month to pay for that month). The `COALESCE` fallback to the day
+  *before* the membership started is what keeps a brand-new, not-yet-paid member from
+  reading as overdue on day one, while a member who joined months ago and never paid
+  does. Three states, not two: `'paid' | 'overdue' | 'none'` -- `'none'` means no active
+  membership (never enrolled, drop-in only, or ended) and is deliberately not styled as
+  a warning. Effective price is `COALESCE(memberships.price_override_cents,
+  membership_plans.price_cents)` -- the same COALESCE-override idiom as class capacity's
+  `COALESCE(class_sessions.capacity, class_templates.capacity)`, so there's one override
+  pattern in this codebase, not two. The batch helper is a single query (a correlated
+  subquery, not a loop) for however many user ids it's given -- `coach/sessions/[id].js`'s
+  GET calls it once for the whole roster + waitlist combined, not once per student.
+  **The flag is informational only, with no enforcement anywhere**: an overdue member
+  RSVPs, waitlists, and is auto-promoted exactly like anyone else -- see "Waitlist and
+  notifications" below for why `_utils/waitlist.js` is untouched by this.
 
 ## Auth mechanics
 
@@ -308,7 +353,7 @@ Full DDL lives in `migrations/0001_initial.sql`, `migrations/0002_session_rsvps.
   `change-password.html`, `request-account.html`) have a logo-only header with none of
   the nav/logout elements.
 
-  **Load order, and why it matters**: `<script src="/app.js?v=2"></script>` (a plain
+  **Load order, and why it matters**: `<script src="/app.js?v=3"></script>` (a plain
   script, *not* `defer`) is placed immediately before each page's own trailing inline
   `<script>` at the end of `<body>` — not in `<head>`. Both are ordinary blocking scripts,
   so the browser executes them strictly in document order: `app.js` always finishes before
@@ -348,6 +393,12 @@ Full DDL lives in `migrations/0001_initial.sql`, `migrations/0002_session_rsvps.
 | `/api/student/attendance` | GET | student | own history only |
 | `/api/student/upcoming` | GET | student | next 7 days of weekly-template classes, merged with own RSVPs; each row has `capacity`, `attending` (`status='going'` count, not just the caller's), `full`, and (Phase 3, T3.6) `rsvpStatus` (`null \| 'going' \| 'waitlisted'`) + `waitlistPosition` (`null` unless waitlisted). `going` means `rsvpStatus === 'going'` specifically — **not** "has any row" (that was the pre-Phase-3 meaning; a waitlisted row would otherwise read as `going:true`, wrongly) |
 | `/api/student/rsvp` | POST | student | `{templateId,date,going}` → insert/delete own `session_rsvps` row. **The old 409 is gone (Phase 3, T3.2).** `going:true` against a class at capacity now waitlists instead of rejecting: `{ok:true, status:'going'\|'waitlisted', position?}`. A student who already has a row is never rejected (idempotent re-RSVP from either status). The going-path capacity check is atomic (`INSERT...SELECT...WHERE COUNT(status='going') < capacity`, not read-then-insert) so two students racing for the last spot can't both win — the loser waitlists instead. `going:false` is `DELETE...RETURNING status`; a freed `going` row calls `promoteAndNotify` (a freed `waitlisted` row does not — nothing to promote into). |
+| `/api/coach/plans` | GET/POST | coach | (Phase 4) list/create membership plans; `price_cents` validated as a non-negative integer, `period` set at creation |
+| `/api/coach/plans/:id` | PATCH | coach | (Phase 4) partial update — `name`/`price_cents`/`allowance_per_period`/`active`, at least one required; `period` is immutable and rejected with 400 |
+| `/api/coach/students/:id/membership` | POST | coach | (Phase 4) `{plan_id,start_date,price_override_cents?}` — assigns/changes a student's plan; rejects a `period='session'` plan (Drop-in) with 400; closes any existing open membership to the day before the new `start_date` |
+| `/api/coach/payments` | GET/POST | coach | (Phase 4) `GET ?userId=` filters to one student; `POST` records a payment (`amount_cents`, `method` in `cash`/`eft`, `paid_on`/`covers_start`/`covers_end` dates, `covers_end >= covers_start`) — `recorded_by` is always the session's coach, never accepted from the body |
+| `/api/coach/sessions/:id` GET (continued) | — | coach | (Phase 4, T4.6) both `roster` and `waitlist` rows now also carry `paymentStatus: 'paid'\|'overdue'\|'none'`, computed by one batched query — see "Membership plans and payments" below |
+| `/api/student/payments` | GET | student | (Phase 4) own plan (with effective price), own `status`, and own payment history — derives the user from the session only, accepts no id parameter of any kind |
 
 ## Frontend notes
 
@@ -355,7 +406,7 @@ Full DDL lives in `migrations/0001_initial.sql`, `migrations/0002_session_rsvps.
   "Shared code" above), loaded on every page. Each page still has its own trailing inline
   `<script>` for page-specific logic (a form handler, a data-fetch-and-render loop).
   `script.js` is homepage-only, kept separate because it also owns the contact-form
-  handler and the header-hide-on-scroll effect, neither of which belongs on the other 11
+  handler and the header-hide-on-scroll effect, neither of which belongs on the other 12
   pages.
 - `.form` is a reusable CSS class (generalized from what was originally `#contactForm`-only
   styling) for any label/input/button form layout.
@@ -363,14 +414,15 @@ Full DDL lives in `migrations/0001_initial.sql`, `migrations/0002_session_rsvps.
   picker icon, checkboxes) render dark-aware instead of near-invisible light-mode
   defaults.
 - **Cache-busting**: every page's `styles.css` reference includes a version query string
-  (`styles.css?v=4` as of this writing), and `app.js` likewise (`app.js?v=2` as of Phase
-  2's T2.4). **Bump the relevant number on every future change to that asset, on every page that references
+  (`styles.css?v=5` as of Phase 4's T4.8, up from `v=4` -- badge CSS for the payment
+  status flag), and `app.js` likewise (`app.js?v=3`, up from `v=2` -- Phase 4 added
+  `formatRands()`). **Bump the relevant number on every future change to that asset, on every page that references
   it** — Cloudflare serves the HTML itself with `max-age=0` (always fresh), but static
   assets get a 4-hour browser cache; without the version bump, visitors can keep seeing a
   stale asset for hours after a fix ships. This bit us twice during development before
   the versioning was added.
 - Mobile nav (toggle button, `.nav-links.open` class, closes on link-click or scroll,
-  locks body scroll while open) is one implementation in `app.js`, shared by all 12
+  locks body scroll while open) is one implementation in `app.js`, shared by all 13
   pages including the homepage. Every authenticated page's nav also has an explicit
   "Home" link back to `/`; the homepage swaps "Login" for "My dashboard" when
   `/api/auth/session` reports a logged-in visitor.
@@ -433,3 +485,30 @@ reference above). Facts worth knowing before touching this code:
   Encrypted, not readable back). Note the actual Cloudflare Pages project name is
   `kickboxingwebsite`, not `cjn-academy-website` (the unrelated `"name"` field in
   `public/wrangler.jsonc`) — get this from `wrangler pages project list` if unsure.
+
+## Membership plans and payments (Phase 4)
+
+Money is recorded, never moved — no gateway, no card data, no PCI scope. Facts worth
+knowing before touching this code (full schema detail is under "Database schema" above):
+
+- **Integer cents everywhere, on the server.** `price_cents`, `amount_cents`,
+  `price_override_cents` are all `INTEGER`; R550 is `55000`. Rand formatting
+  (`formatRands(cents)`, `app.js`) happens only in the browser, at display time. Never
+  introduce a float or a formatted string into a request body or a DB column.
+- **`allowance_per_period` is dormant by design.** It's stored on every plan (T4.1) but
+  read by nothing — Phase 5 is where "4 classes a month" becomes an over-limit flag. Do
+  not treat the unused column as dead schema to clean up.
+- **`_utils/waitlist.js` is untouched by Phase 4, deliberately.** An overdue member
+  RSVPs and waitlists exactly like anyone else, and — the case newly reachable once a
+  waitlist and a payment status can coexist — **is still auto-promoted in strict queue
+  order** when a spot frees up. `promoteWaitlist()`'s ordering (`created_at, user_id`)
+  has no payment awareness and must not gain any; the whole overdue rule lives in
+  `_utils/payments.js`, read-only, on the display side.
+- **Drop-in (`period='session'`) can never back a membership.** It exists purely so a
+  `payments.plan_id` can reference it; assigning it via
+  `/api/coach/students/:id/membership` is a 400. A drop-in-only payer's status is
+  `'none'`, never `'overdue'` — there's no membership row for the overdue rule to
+  evaluate against.
+- **A plan's `period` is immutable after creation** (`plans/:id`'s PATCH rejects it
+  outright) — changing `'month'` to `'session'` on a plan with live memberships would
+  silently orphan the D2 guard's assumption.
