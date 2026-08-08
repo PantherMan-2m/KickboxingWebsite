@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../styles.css?v=4" />
+  <link rel="stylesheet" href="../styles.css?v=5" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
 </head>
 <body>
@@ -26,6 +26,11 @@
 </header>
 
 <main>
+  <section class="container section">
+    <h2>My membership</h2>
+    <div id="paymentsPanel" class="card">Loading…</div>
+  </section>
+
   <section class="container section">
     <h2>My attendance</h2>
     <div class="scroll-x">
@@ -45,8 +50,54 @@
   </div>
 </footer>
 
-<script src="/app.js?v=2"></script>
+<script src="/app.js?v=3"></script>
 <script>
+  function paymentBadge(status) {
+    const labels = { paid: 'Paid', overdue: 'Overdue', none: 'No plan' };
+    return `<span class="pay-badge pay-badge--${status}">${labels[status] || labels.none}</span>`;
+  }
+
+  async function loadPayments() {
+    const panel = document.getElementById('paymentsPanel');
+    const { data } = await fetchJson('/api/student/payments');
+    if (!data.ok) {
+      panel.innerHTML = `<p class="muted">${escapeHtml(data.error || 'Could not load your membership.')}</p>`;
+      return;
+    }
+
+    const planLine = data.plan
+      ? `<p><strong>${escapeHtml(data.plan.name)}</strong> · ${formatRands(data.plan.effectivePriceCents)} ${paymentBadge(data.status)}</p>`
+      : `<p class="muted">No plan on file. ${paymentBadge(data.status)}</p>`;
+
+    const historyRows = data.payments.length
+      ? data.payments
+          .map(
+            (p) => `
+        <tr>
+          <td>${p.paidOn}</td>
+          <td>${p.planName ? escapeHtml(p.planName) : '—'}</td>
+          <td>${formatRands(p.amountCents)}</td>
+          <td>${p.method}</td>
+          <td>${p.coversStart} – ${p.coversEnd}</td>
+        </tr>
+      `
+          )
+          .join('')
+      : '<tr><td colspan="5" class="muted">No payments on file yet.</td></tr>';
+
+    panel.innerHTML = `
+      ${planLine}
+      <div class="scroll-x">
+        <table class="schedule">
+          <thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Method</th><th>Covers</th></tr></thead>
+          <tbody>${historyRows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  loadPayments();
+
   (async () => {
     const { data } = await fetchJson('/api/student/attendance');
     const body = document.getElementById('attendanceBody');
