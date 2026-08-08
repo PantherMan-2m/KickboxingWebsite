@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../styles.css?v=4" />
+  <link rel="stylesheet" href="../styles.css?v=5" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
 </head>
 <body>
@@ -23,6 +23,7 @@
       <a href="/coach/requests.html">Requests</a>
       <a href="/coach/templates.html">Schedule</a>
       <a href="/coach/attendance.html">Attendance</a>
+      <a href="/coach/payments.html">Payments</a>
       <a href="#" id="logoutLink">Log out</a>
     </nav>
   </div>
@@ -59,15 +60,35 @@
     <div class="scroll-x">
       <table class="schedule" id="rosterTable">
         <thead>
-          <tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr>
+          <tr><th>Name</th><th>Email</th><th>Status</th><th>Plan</th><th></th></tr>
         </thead>
         <tbody id="rosterBody">
-          <tr><td colspan="4">Loading…</td></tr>
+          <tr><td colspan="5">Loading…</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 </main>
+
+<dialog id="assignPlanDialog" class="card">
+  <form id="assignPlanForm" class="form" method="dialog" style="max-width:320px">
+    <h3 id="assignPlanHeading">Assign a plan</h3>
+    <label for="assignPlanSelect">Plan</label>
+    <select id="assignPlanSelect" required></select>
+
+    <label for="assignPlanStart">Start date</label>
+    <input id="assignPlanStart" type="date" required />
+
+    <label for="assignPlanOverride">Price override (Rands, optional -- family discount)</label>
+    <input id="assignPlanOverride" type="number" min="0" step="0.01" placeholder="Use plan price" />
+
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn" type="submit">Save</button>
+      <button class="btn btn-outline" type="button" id="assignPlanCancel">Cancel</button>
+    </div>
+    <p class="form-status" id="assignPlanStatus" role="status"></p>
+  </form>
+</dialog>
 
 <footer class="site-footer">
   <div class="container">
@@ -75,16 +96,28 @@
   </div>
 </footer>
 
-<script src="/app.js?v=2"></script>
+<script src="/app.js?v=3"></script>
 <script>
   const rosterBody = document.getElementById('rosterBody');
   const searchInput = document.getElementById('searchInput');
   const statusFilter = document.getElementById('statusFilter');
+  const assignPlanDialog = document.getElementById('assignPlanDialog');
+  const assignPlanForm = document.getElementById('assignPlanForm');
+  const assignPlanSelect = document.getElementById('assignPlanSelect');
 
   // The roster is fully loaded client-side already (gym scale, not 500+ students), so
   // filtering it here avoids a new endpoint. allStudents holds the unfiltered fetch;
   // applyFilters() derives what's actually rendered.
   let allStudents = [];
+  // Only 'month' plans can back a membership (D2) -- Drop-in never appears here.
+  let monthlyPlans = [];
+
+  async function loadPlans() {
+    const { data } = await fetchJson('/api/coach/plans');
+    if (data.ok) {
+      monthlyPlans = data.plans.filter((p) => p.period === 'month' && p.active);
+    }
+  }
 
   function applyFilters() {
     const term = searchInput.value.trim().toLowerCase();
@@ -100,8 +133,8 @@
   function renderRoster(students) {
     if (students.length === 0) {
       rosterBody.innerHTML = allStudents.length === 0
-        ? '<tr><td colspan="4">No students yet.</td></tr>'
-        : '<tr><td colspan="4">No matching students.</td></tr>';
+        ? '<tr><td colspan="5">No students yet.</td></tr>'
+        : '<tr><td colspan="5">No matching students.</td></tr>';
       return;
     }
     rosterBody.innerHTML = students.map((s) => `
@@ -109,9 +142,15 @@
         <td>${escapeHtml(s.name)}</td>
         <td>${escapeHtml(s.email)}</td>
         <td>${s.status}</td>
-        <td><button class="btn btn-outline btn-sm" data-id="${s.id}" data-status="${s.status === 'active' ? 'inactive' : 'active'}">
-          ${s.status === 'active' ? 'Deactivate' : 'Activate'}
-        </button></td>
+        <td>${s.planName ? escapeHtml(s.planName) : 'No plan'}</td>
+        <td>
+          <button class="btn btn-outline btn-sm" data-id="${s.id}" data-status="${s.status === 'active' ? 'inactive' : 'active'}">
+            ${s.status === 'active' ? 'Deactivate' : 'Activate'}
+          </button>
+          <button class="btn btn-outline btn-sm" data-plan-id="${s.id}" data-plan-name="${escapeHtml(s.name)}">
+            ${s.planName ? 'Change plan' : 'Assign plan'}
+          </button>
+        </td>
       </tr>
     `).join('');
 
@@ -130,6 +169,22 @@
         }
       });
     });
+
+    rosterBody.querySelectorAll('button[data-plan-id]').forEach((btn) => {
+      btn.addEventListener('click', () => openAssignPlanDialog(btn.dataset.planId, btn.dataset.planName));
+    });
+  }
+
+  function openAssignPlanDialog(studentId, studentName) {
+    document.getElementById('assignPlanHeading').textContent = `Assign a plan -- ${studentName}`;
+    assignPlanForm.dataset.studentId = studentId;
+    assignPlanSelect.innerHTML = monthlyPlans
+      .map((p) => `<option value="${p.id}">${escapeHtml(p.name)} (${formatRands(p.priceCents)}/month)</option>`)
+      .join('');
+    document.getElementById('assignPlanStart').value = sastTodayIso();
+    document.getElementById('assignPlanOverride').value = '';
+    document.getElementById('assignPlanStatus').textContent = '';
+    assignPlanDialog.showModal();
   }
 
   async function loadRoster() {
@@ -138,12 +193,46 @@
       allStudents = data.students;
       applyFilters();
     } else {
-      rosterBody.innerHTML = `<tr><td colspan="4">${escapeHtml(data.error || 'Could not load roster.')}</td></tr>`;
+      rosterBody.innerHTML = `<tr><td colspan="5">${escapeHtml(data.error || 'Could not load roster.')}</td></tr>`;
     }
   }
 
   searchInput.addEventListener('input', applyFilters);
   statusFilter.addEventListener('change', applyFilters);
+
+  document.getElementById('assignPlanCancel').addEventListener('click', () => assignPlanDialog.close());
+
+  assignPlanForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('assignPlanStatus');
+    const submitButton = assignPlanForm.querySelector('button[type="submit"]');
+    const overrideRands = document.getElementById('assignPlanOverride').value;
+
+    status.textContent = 'Saving…';
+    submitButton.disabled = true;
+
+    try {
+      const { response, data } = await fetchJson(`/api/coach/students/${assignPlanForm.dataset.studentId}/membership`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan_id: assignPlanSelect.value,
+          start_date: document.getElementById('assignPlanStart').value,
+          price_override_cents: overrideRands === '' ? null : Math.round(Number(overrideRands) * 100),
+        }),
+      });
+
+      if (!response?.ok || !data.ok) {
+        status.textContent = data.error || 'Could not save.';
+        return;
+      }
+
+      assignPlanDialog.close();
+      await loadRoster();
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
 
   document.getElementById('addStudentForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -180,7 +269,7 @@
     }
   });
 
-  loadRoster();
+  loadPlans().then(loadRoster);
 </script>
 </body>
 </html>

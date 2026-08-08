@@ -1,13 +1,13 @@
 import { jsonResponse } from '../../_utils/auth.js';
+import { parseJsonBody } from '../../_utils/body.js';
 
 export async function onRequestPatch(context) {
   const { id } = context.params;
-  let body;
-  try {
-    body = await context.request.json();
-  } catch {
+  const parsed = await parseJsonBody(context);
+  if (!parsed.ok) {
     return jsonResponse({ ok: false, error: 'Malformed request' }, { status: 400 });
   }
+  const body = parsed.body;
 
   if (!['active', 'inactive'].includes(body.status)) {
     return jsonResponse({ ok: false, error: 'status must be active or inactive' }, { status: 400 });

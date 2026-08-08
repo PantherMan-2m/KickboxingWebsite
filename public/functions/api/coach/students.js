@@ -1,10 +1,18 @@
 import { hashPassword, generateTempPassword, jsonResponse } from '../_utils/auth.js';
 import { sendEmail } from '../_utils/email.js';
 
+// T4.4: each student's current (end_date IS NULL) plan, if any -- one LEFT JOIN,
+// not a per-student lookup, since a coach's roster page needs this for every row.
 export async function onRequestGet(context) {
   const { results } = await context.env.DB.prepare(
-    `SELECT id, email, name, status, must_change_password, created_at
-     FROM users WHERE role = 'student' ORDER BY name COLLATE NOCASE`
+    `SELECT u.id, u.email, u.name, u.status, u.must_change_password, u.created_at,
+            m.id AS membershipId, m.start_date AS membershipStartDate,
+            mp.id AS planId, mp.name AS planName,
+            m.price_override_cents AS priceOverrideCents, mp.price_cents AS planPriceCents
+     FROM users u
+     LEFT JOIN memberships m ON m.user_id = u.id AND m.end_date IS NULL
+     LEFT JOIN membership_plans mp ON mp.id = m.plan_id
+     WHERE u.role = 'student' ORDER BY u.name COLLATE NOCASE`
   ).all();
   return jsonResponse({ ok: true, students: results });
 }
