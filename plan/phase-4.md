@@ -417,8 +417,8 @@ the word). Any `app.js` additions go in the shared file, not per-page.
 
 **Do not write `reports/phase-4-completion.md` yet.** See T4.11.
 
-### T4.10 — `[HUMAN GATE]` Backup, then migrate production
-**Depends on**: T4.9, and on the branch being green.
+### T4.10 — `[HUMAN GATE]` Backup, then migrate production — **DONE 2026-08-08, EARLY**
+**Depended on**: T4.9, and on the branch being green.
 
 **This is the task `PLAN.md` rule 5 was written for.** From here on the production database
 contains payment records, and "never `--remote` without a current backup" is not negotiable.
@@ -431,11 +431,50 @@ contains payment records, and "never `--remote` without a current backup" is not
 4. After applying: `wrangler d1 migrations list --remote` shows zero pending, and a
    `SELECT COUNT(*) FROM membership_plans --remote` returns 3.
 
+**Verified complete 2026-08-08 (Opus, read-only checks against production):**
+- Backup present: `backups/cjn-academy-2026-08-08-pre-phase4.sql`, 10422 bytes, 10:45.
+- `wrangler d1 migrations list cjn-academy --remote` → `✅ No migrations to apply!`
+- `SELECT COUNT(*)` on production → `{plans: 3, memberships: 0, payments: 0}`.
+
 Note for the report: the backup file now contains financial records, which raises its
 sensitivity. Flag it for **Phase 9**'s POPIA review — that phase already depends on Phase 4.
 
+#### Sequencing error in this spec — recorded, and it cost nothing this time
+
+**This task should not have come before T4.11.** Making the review depend on the production
+migration was an authoring error at the Phase 3→4 checkpoint; Phase 3's actual order is the
+correct one and is sitting in the git log (review fixes `56829b0`…`0d7cebc` → merge
+`9db557d` → *then* migrate and deploy `846ea03`). Applying a migration before the review
+means a schema finding costs a corrective migration against a live table instead of an edit
+to an unapplied file.
+
+It cost nothing here **because production carries zero rows in `memberships` and
+`payments`** (verified above) — `0005` is purely additive, so a corrective `0006` is free
+right now. That window closes the moment Giovanni records a real payment.
+
+Generalised into `PLAN.md`'s review policy so Phases 7 and 8 do not repeat it.
+
 ### T4.11 — Review, then merge
-**Depends on**: T4.10.
+**Depends on**: T4.9 and a green suite. (Originally written as depending on T4.10 — that was
+backwards; see the sequencing note under T4.10. T4.10 has in fact already run.)
+
+**Pre-review state, verified 2026-08-08 (Opus):** 9 commits `b3785ab`…`8cc63cd`, 37 files,
++2033/−95, working tree clean, `origin/main` in sync. `npm test` → **160 pass, 0 fail**
+(up from 115; 442s). `git diff main...phase-4-payments -- .../_utils/waitlist.js` empty.
+No completion report committed. `styles.css?v=5` everywhere, `app.js?v=3` on 13 pages.
+All of T4.2's, T4.6's and T4.7's mandatory assertions exist —
+`roster-payment-status.test.mjs:52` (both arrays, overdue-and-waitlisted),
+`:92` (promotion is payment-status-agnostic), `:147` (drop-in reads `none`),
+`student-payments.test.mjs:60` (the IDOR attempt).
+
+**One gap found pre-review, fix before spending the review** —
+`test/unit/shared-frontend.test.mjs:15-28`: `PAGES` is a hardcoded 12-entry array and the
+new `coach/payments.html` was never added to it. The page *does* reference `app.js?v=3`, so
+nothing is broken — but it is the only page exempt from Phase 1's "no leftover duplicated
+nav/logout/escapeHtml/year code" guarantee, which is precisely the defect class Phase 1
+existed to close. Add the entry (and consider asserting `PAGES.length` against a filesystem
+count, so page 14 cannot be forgotten the same way). Paying `ultra` to find a missing array
+element is not a good use of it.
 
 **`/code-review ultra` is reserved for this phase** and it is Giovanni who runs it — an
 agent cannot launch it, and must not try.
