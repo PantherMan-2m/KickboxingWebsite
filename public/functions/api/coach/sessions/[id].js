@@ -2,6 +2,7 @@ import { jsonResponse } from '../../_utils/auth.js';
 import { parseJsonBody } from '../../_utils/body.js';
 import { parseCapacity } from '../../_utils/capacity.js';
 import { promoteAndNotify } from '../../_utils/waitlist.js';
+import { paymentStatusForRoster } from '../../_utils/payments.js';
 
 export async function onRequestGet(context) {
   const { id } = context.params;
@@ -75,6 +76,13 @@ export async function onRequestGet(context) {
     .bind(id)
     .first();
 
+  // T4.6 (D4/D6): the overdue flag, applied to both lists -- the waitlist case is
+  // the one Phase 3 flagged as newly reachable (an overdue member still waitlists
+  // and is still promoted in strict queue order; see plan/phase-4.md). One batch
+  // query for the whole page, not one per student.
+  const allIds = [...roster.map((r) => r.id), ...waitlist.map((w) => w.id)];
+  const paymentStatusMap = await paymentStatusForRoster(context.env.DB, allIds);
+
   return jsonResponse({
     ok: true,
     session: {
@@ -88,8 +96,13 @@ export async function onRequestGet(context) {
       effectiveCapacity: session.capacity !== null ? session.capacity : session.templateCapacity,
       attendanceSaved: attendanceCount.n > 0,
     },
-    roster: roster.map((r) => ({ ...r, status: r.status || 'absent', going: goingIds.has(r.id) })),
-    waitlist,
+    roster: roster.map((r) => ({
+      ...r,
+      status: r.status || 'absent',
+      going: goingIds.has(r.id),
+      paymentStatus: paymentStatusMap.get(r.id) || 'none',
+    })),
+    waitlist: waitlist.map((w) => ({ ...w, paymentStatus: paymentStatusMap.get(w.id) || 'none' })),
   });
 }
 
