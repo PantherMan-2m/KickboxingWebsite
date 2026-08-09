@@ -77,6 +77,22 @@ restructure and Cloudflare configuration interactively, which was well within So
 and consumed the context reserved for planning Phase 1. If a task turns out to be execution,
 write it up and hand it over rather than doing it.
 
+**Every handoff prompt must say "commit your work" explicitly** (added 2026-08-09).
+Repeatedly in the Phase 4 cycle — the review fix pass, the payment-history change, the
+mandatory completion reports — a Sonnet session finished correct work and left it sitting
+in the working tree. None of them were wrong about the code; they simply treated "done"
+as "edited". An uncommitted tree is invisible to the next session, unreviewable as a
+diff, and one `git clean` from gone. Name the commits wanted, and make `git status` clean
+an explicit exit condition.
+
+**Corollary — every session opens by establishing state from git, before reading any
+prose** (added 2026-08-09, at the Phase 4→5 checkpoint): `git log --oneline -10`,
+`git branch -v`, `git status -sb`. That checkpoint was handed a briefing stating a branch
+had zero commits and a `[HUMAN GATE]` merge was still pending; git showed the work
+committed, merged, pushed, and already deployed. Hand-written status — in this file, in
+`plan/phase-N.md` headers, in a session briefing — describes the repo at the moment
+someone typed it, and has lagged by a whole phase before. Trust the repo, then read.
+
 **Opus checkpoints at phase boundaries, not per task.** Per-task supervision would be redundant
 — exit conditions here are deliberately literal and self-checkable (`npm test` passes, grep
 returns zero, `migrations list` shows zero pending). Sonnet verifies those unaided. Opus is for
@@ -226,8 +242,8 @@ over-specifying them now guarantees rework.
 | **1** | Shared `app.js` + navigation fixes across every page | 0 | `plan/phase-1.md` — done, merged, live-verified |
 | **2** | Class capacity + RSVP enforcement, next-class headcount panel, attendance pre-fill from RSVP, roster search | 0, 1 | `plan/phase-2.md` — done, merged, live-verified |
 | **3** | Waitlist + coach notification hook (email + optional webhook) | 2 | `plan/phase-3.md` — done, merged, live-verified |
-| **4** | Membership plans, payment recording, overdue flag on the attendance roster, student self-view | 0, 1, 3 | `plan/phase-4.md` — **detailed into tasks T4.0–T4.11**, 2026-08-07 |
-| **5** | Attendance intelligence: over-limit flags, dormant-student alerts, basic reporting | 2, 4 | `plan/phase-5.md` — mapped only |
+| **4** | Membership plans, payment recording, overdue flag on the attendance roster, student self-view | 0, 1, 3 | `plan/phase-4.md` — done, merged, live-verified |
+| **5** | Attendance intelligence: over-limit flags, dormant-student alerts, basic reporting | 2, 4 | `plan/phase-5.md` — **detailed into tasks T5.0–T5.9**, 2026-08-09 |
 | **6** | Progress notes, skill/competency grid, discipline tags | 1 | `plan/phase-6.md` — mapped only |
 | **7** | Account safety: self-service password reset, login rate limiting, audit trail | 0 | `plan/phase-7.md` — mapped only |
 | **8** | Public trial bookings for non-members | 2, 3, 7 | `plan/phase-8.md` — mapped only |
@@ -255,9 +271,17 @@ Not blocking Phases 0–2; must be answered before the phase named. Full context
    Alongside it, five further real-world facts (the three plans and their prices,
    calendar-month billing, cash/EFT record-only, students see their own status) and eight
    decisions D1–D8 were settled at the Phase 3→4 checkpoint — see `plan/phase-4.md`.
-3. **Phase 6** — who defines the skill taxonomy, and is it editable in the UI or seeded in a
+3. ~~**Phase 5** — does the plan allowance count attendance or RSVPs, and over what
+   window?~~ **Answered by Giovanni 2026-08-09** at the Phase 4→5 checkpoint: only
+   attendance marked `present` counts, over a **weekly** window, flagged and never
+   enforced; dormant is 14 days. The fact-finding paid for itself again — `0005` seeded
+   "One Class / week" as `allowance_per_period = 4, period = 'month'`, which read
+   literally would flag every such student OVER LIMIT in roughly a third of all months
+   for attending exactly as they paid to. Decisions D1–D8 and the one still-blocked task
+   (T5.7, reporting scope) are in `plan/phase-5.md`.
+4. **Phase 6** — who defines the skill taxonomy, and is it editable in the UI or seeded in a
    migration? Current assumption: coach-editable in the UI.
-4. **Phase 8** — does a trial booking create a `pending` user (reusing the Phase 2 approval
+5. **Phase 8** — does a trial booking create a `pending` user (reusing the Phase 2 approval
    flow) or a separate record? Leaning `pending` user, for reuse.
-5. **Phase 9** — waiver wording is a legal question, not an engineering one. Needs a real
+6. **Phase 9** — waiver wording is a legal question, not an engineering one. Needs a real
    answer before the phase can be built.
