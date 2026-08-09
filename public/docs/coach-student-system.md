@@ -118,13 +118,15 @@ back, follow up with a coach directly.
     informational, not a warning. "Overdue" means their last payment's coverage plus a
     7-day grace period has passed. **The badge is informational only** — it doesn't stop
     anyone from RSVPing, joining a waitlist, or being auto-promoted off one; there's no
-    enforcement anywhere. Students can see their own plan, price, and payment history on
-    their own dashboard (`/student/dashboard.html`).
+    enforcement anywhere. Students can see their own plan, price, and their **3 most
+    recent** payments on their own dashboard (`/student/dashboard.html`) -- older
+    payments aren't shown, but the Paid/Overdue/No plan status itself always reflects
+    their full payment history, not just those 3.
 
 ## Student walkthrough
 
 Log in → lands on `/student/dashboard.html` → see **My membership** (your current plan,
-its price, a Paid/Overdue/No plan badge, and your payment history) above a table of
+its price, a Paid/Overdue/No plan badge, and your 3 most recent payments) above a table of
 every session you've been marked in, with date, class name, and status. The **Upcoming classes**
 (`/student/upcoming.html`) nav link shows the next 7 days of recurring weekly classes,
 each with a spots-remaining count and an "I'm going" button — tap it to RSVP, tap again

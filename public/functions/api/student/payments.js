@@ -18,12 +18,18 @@ export async function onRequestGet(context) {
     .bind(userId)
     .first();
 
+  // History shown to the student is capped to the 3 most recent -- older rows never
+  // leave the server. The status query below is deliberately separate and unlimited:
+  // paymentStatusForRoster's MAX(covers_end) must see every payment, or a student with
+  // 4+ payments could read 'overdue' via a stale-looking recent payment while an older
+  // one (outside this LIMIT) actually still covers them. Do not consolidate these two
+  // queries.
   const { results: payments } = await context.env.DB.prepare(
     `SELECT p.id, p.amount_cents AS amountCents, p.method, p.paid_on AS paidOn,
             p.covers_start AS coversStart, p.covers_end AS coversEnd, p.note, mp.name AS planName
      FROM payments p
      LEFT JOIN membership_plans mp ON mp.id = p.plan_id
-     WHERE p.user_id = ? ORDER BY p.paid_on DESC, p.created_at DESC`
+     WHERE p.user_id = ? ORDER BY p.paid_on DESC, p.created_at DESC LIMIT 3`
   )
     .bind(userId)
     .all();
