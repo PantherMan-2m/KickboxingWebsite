@@ -1,10 +1,10 @@
 # Codebase Map
 
 Findings get recorded here as data, not re-derived each session — per `PLAN.md`'s "Keeping
-sessions cheap" rule. Verified against the code on 2026-08-08, on branch `phase-4-payments`
-(membership plans, payment recording, the overdue flag) before merge; migration `0005` is
-local-only until T4.10. Update this file when the codebase's shape changes; do not let a
-session re-grep for it.
+sessions cheap" rule. Verified against the code on 2026-08-09, after Phase 4 (membership
+plans, payment recording, the overdue flag) merged to `main`; migrations `0005` and `0006`
+are both applied to production. Update this file when the codebase's shape changes; do not
+let a session re-grep for it.
 
 ## Page inventory (13 HTML pages, `public/`)
 
@@ -196,8 +196,14 @@ zero pending and `SELECT COUNT(*) FROM session_rsvps WHERE status <> 'going'` re
 before the deploy), `0005_memberships_payments.sql` (adds `membership_plans`,
 `memberships`, `payments` -- see `coach-student-system-technical.md`'s "Database schema"
 for column-by-column detail; seeds the three fixed-id plans `plan_dropin`/`plan_weekly`/
-`plan_unlimited`; applied to production in T4.10, preceded by a fresh backup per T0.3).
-Tracked via `migrations_dir` in `wrangler.jsonc`. Next number is `0006`.
+`plan_unlimited`; applied to production in T4.10, preceded by a fresh backup per T0.3),
+`0006_memberships_one_open_index.sql` (adds a partial unique index,
+`idx_memberships_one_open` on `memberships(user_id) WHERE end_date IS NULL`, enforcing at
+most one open membership per student at the database level -- Phase 4 review finding 5,
+paired with `students/[id]/membership.js` wrapping its UPDATE+INSERT in `DB.batch()` and
+catching the constraint violation as a 409; applied to production 2026-08-09, preceded by
+a fresh backup per T0.3). Tracked via `migrations_dir` in `wrangler.jsonc`. Next number is
+`0007`.
 
 ## Static asset versions (bump on every change, every referencing page — `PLAN.md` rule 6)
 
