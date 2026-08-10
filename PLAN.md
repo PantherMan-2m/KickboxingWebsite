@@ -109,7 +109,7 @@ deliberately under-specified — they get detailed with fresh information, not g
 
 Token budget is now a first-class constraint, not an afterthought. Measured at the Phase 1
 checkpoint: the standard opening prompt made a session read 1,587 lines (~19k tokens) before
-doing anything, and adding the completion reports took it past 30k. Four standing rules:
+doing anything, and adding the completion reports took it past 30k. Five standing rules:
 
 1. **Documents are split by who needs them, and the opening prompt names only the load-bearing
    ones.** A session executing Phase N reads this file plus `plan/phase-N.md` — not the task
@@ -121,7 +121,18 @@ doing anything, and adding the completion reports took it past 30k. Four standin
    the original pattern: a checkpoint that discovers the page count, the middleware list, or the
    function tree writes it down so the next session greps zero times. `plan/codebase-map.md`
    holds this now.
-4. **Opus is handed a packet, not a repo.** Before a checkpoint, the executing Sonnet session
+4. **A task report carries decisions, not evidence** (added 2026-08-10). Evidence is still
+   mandatory — it goes in the commit, `TODO.md`, or the completion report, where it is
+   permanent and greppable. The *chat* report is a different artifact: what changed in one
+   line, anything that needed judgement and how it was called, anything the instructions
+   got wrong, and the verdict (suite green/red plus counts). Not verbatim test output, not
+   timings, not temp-file paths, not the root cause restated back to whoever diagnosed it,
+   not the constraints quoted back as proof of compliance. Measured on the
+   `fix/clock-dependent-tests` report: roughly two thirds was already written down
+   elsewhere in the same commit. A finding that *narrows* scope — "I audited the other six
+   and they're not affected, here's why" — is worth more room than any amount of passing
+   output.
+5. **Opus is handed a packet, not a repo.** Before a checkpoint, the executing Sonnet session
    writes `reports/phase-N-checkpoint-packet.md` — what changed, what is open, the verification
    table, and the specific decisions needing judgement. Target 150 lines. Opus reads that plus
    this file's first 150 lines, and asks for more only when the packet is insufficient.
