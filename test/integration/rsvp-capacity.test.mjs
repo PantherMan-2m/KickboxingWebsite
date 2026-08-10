@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { resetAndSeed, startServer, stopServer, BASE_URL } from '../helpers/server.mjs';
 import { login } from '../helpers/auth.mjs';
-import { todayIso, addDaysIso, dayOfWeekFor, RSVP_WINDOW_DAYS } from '../../public/functions/api/_utils/dates.js';
+import { dateForDowInWindow } from '../helpers/dates.mjs';
 import devEnv from '../../scripts/lib/devEnv.js';
 
 const { runWrangler, getD1Config } = devEnv;
@@ -49,17 +49,6 @@ before(async () => {
 after(() => {
   stopServer();
 });
-
-// The one date for `dow` that falls within the RSVP_WINDOW_DAYS window from today --
-// matching exactly what rsvp.js's own window check accepts.
-function dateForDowInWindow(dow) {
-  const today = todayIso();
-  for (let i = 0; i < RSVP_WINDOW_DAYS; i++) {
-    const d = addDaysIso(today, i);
-    if (dayOfWeekFor(d) === dow) return d;
-  }
-  throw new Error(`no date for day-of-week=${dow} within the ${RSVP_WINDOW_DAYS}-day window`);
-}
 
 async function rsvp(cookie, templateId, date, going) {
   return fetch(BASE_URL + '/api/student/rsvp', {

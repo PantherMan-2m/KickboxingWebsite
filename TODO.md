@@ -170,6 +170,54 @@ out of scope for that fix pass and kept here instead of expanding the branch:
   2026-08-08 that billing is one month at a time. See the comment at that line for both
   reasons in full. Revisit only if multi-month prepayment is ever built.
 
+## Clock-dependent test helper — fixed 2026-08-10, `fix/clock-dependent-tests`
+`test/integration/waitlist-coach-visibility.test.mjs`'s "next-class panel's waitlisted
+count" test failed intermittently depending on wall-clock time, not on any code defect.
+Reproduced and fixed on a Monday evening (SAST) — the exact window it fails in — because
+the failure stops reproducing the next morning; see that branch's before/after `npm test`
+output for the concrete failing run.
+
+- **Root cause**: the test picked `dateForDowInWindow(1)` (a Monday within the 7-day RSVP
+  window) and assumed that date would always be `GET /api/coach/next-class`'s answer for
+  "next". `selectNextClass` (`_utils/schedule.js`) correctly excludes a *today*-dated
+  occurrence once its start time has passed. Whenever the test happened to run on the
+  matching weekday, past that class's start time, the only in-window occurrence of that
+  weekday was excluded, `nextClass` came back `null`, and the test threw dereferencing it.
+- **The duplication**: `dateForDowInWindow(dow)` was hand-copied byte-for-byte into 6 files
+  (`waitlist-coach-visibility`, `attendance-prefill`, `waitlist-rsvp`, `waitlist-upcoming`,
+  `roster-payment-status`, `rsvp-capacity`), plus a 7th, generalized variant
+  (`findDateInWindow(predicate)` in `rsvp.test.mjs`). Consolidated into one function,
+  `test/helpers/dates.mjs`'s `dateForDowInWindow`; the 6 exact copies now import it.
+  `findDateInWindow` was left alone deliberately — see audit below.
+- **The fix, and why it doesn't just mirror the implementation**: the constraint was not to
+  derive the test's expected date the same way `selectNextClass` does (a test that
+  reimplements the code under test can't fail). Instead, the fixed test creates a
+  throwaway template dated **tomorrow** rather than reusing a seeded template pinned to a
+  fixed weekday. `selectNextClass` only excludes a *today*-dated occurrence past its start
+  time — a tomorrow-dated occurrence can never match that condition, so the test's outcome
+  no longer depends on wall-clock hour *or* which day of the week it runs on, without the
+  test needing to know or duplicate anything about the exclusion rule itself.
+- **Audit of near-variants (requested alongside the fix)**:
+  - `test/integration/capacity.test.mjs`'s `nextMonday()` (14-day loop, no `RSVP_WINDOW_DAYS`)
+    — not exposed. It only needs *a* valid Monday to create a session via
+    `POST /api/coach/sessions`, which isn't window- or start-time-gated. Left unconsolidated.
+  - `test/integration/rsvp.test.mjs`'s `findDateInWindow(predicate)` — structurally the same
+    loop, generalized. Not exposed: its callers use it for RSVP window/day-of-week
+    validation and `/api/student/upcoming` membership, neither of which apply
+    `selectNextClass`'s "already started today" exclusion (`expandTemplates` has no
+    time-of-day filter). Left as-is.
+  - `test/integration/upcoming.test.mjs`'s inline expected-set loop — deliberately mirrors
+    `expandTemplates()`, not `selectNextClass`, so it's testing a genuinely time-independent
+    piece of logic. Not the same pattern the fix's constraint warns against.
+- **What this means for past green runs**: any historical "`npm test` passed" claim
+  (completion reports, phase checkpoints, this session's own earlier "182/183 green" report
+  on `feat/schedule-ux`) was only ever a statement about the moment it ran. This exact test
+  would have failed identically any other time the suite ran on a Monday evening (or
+  whichever local weekday/time the seeded template's slot had already passed) before this
+  fix — and would have passed by coincidence at most other times. Treat past all-green
+  claims as weaker evidence than they read, specifically for date/time-window logic; a
+  clean run proves the suite was clean *then*, not that this class of bug was absent.
+
 ## Low priority / nice-to-have
 - Instagram social link is still a placeholder (`href="#"`) — no URL provided yet.
 - Two coach photo filenames still contain spaces (`Cristiano marketing.png`, `Giovanni marketing

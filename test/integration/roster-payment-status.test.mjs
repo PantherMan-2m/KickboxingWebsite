@@ -8,7 +8,8 @@ import { resetAndSeed, startServer, stopServer, BASE_URL } from '../helpers/serv
 import { login } from '../helpers/auth.mjs';
 import { openDb } from '../helpers/db.mjs';
 import { onRequestGet } from '../../public/functions/api/coach/sessions/[id].js';
-import { todayIso, addDaysIso, dayOfWeekFor, RSVP_WINDOW_DAYS } from '../../public/functions/api/_utils/dates.js';
+import { todayIso, addDaysIso } from '../../public/functions/api/_utils/dates.js';
+import { dateForDowInWindow } from '../helpers/dates.mjs';
 
 let coachCookie;
 let db;
@@ -31,15 +32,6 @@ function authedFetch(path, init = {}) {
     ...init,
     headers: { 'Content-Type': 'application/json', Cookie: coachCookie, ...(init.headers || {}) },
   });
-}
-
-function dateForDowInWindow(dow) {
-  const today = todayIso();
-  for (let i = 0; i < RSVP_WINDOW_DAYS; i++) {
-    const d = addDaysIso(today, i);
-    if (dayOfWeekFor(d) === dow) return d;
-  }
-  throw new Error(`no date for day-of-week=${dow} within the ${RSVP_WINDOW_DAYS}-day window`);
 }
 
 async function assignMembership(id, userId, startDate, planId = 'plan_weekly') {
