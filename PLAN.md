@@ -244,12 +244,24 @@ over-specifying them now guarantees rework.
 | **3** | Waitlist + coach notification hook (email + optional webhook) | 2 | `plan/phase-3.md` — done, merged, live-verified |
 | **4** | Membership plans, payment recording, overdue flag on the attendance roster, student self-view | 0, 1, 3 | `plan/phase-4.md` — done, merged, live-verified |
 | **5** | Attendance intelligence: over-limit flags, dormant-student alerts, basic reporting | 2, 4 | `plan/phase-5.md` — **detailed into tasks T5.0–T5.9**, 2026-08-09 |
+| **5.5** | Bookable one-off sessions: re-key `session_rsvps` so a class occurrence with no recurring template can carry RSVPs, capacity and a waitlist | 2, 3 | `plan/phase-5.5-bookable-sessions.md` — mapped only |
 | **6** | Progress notes, skill/competency grid, discipline tags | 1 | `plan/phase-6.md` — mapped only |
 | **7** | Account safety: self-service password reset, login rate limiting, audit trail | 0 | `plan/phase-7.md` — mapped only |
-| **8** | Public trial bookings for non-members | 2, 3, 7 | `plan/phase-8.md` — mapped only |
+| **8** | Public trial bookings for non-members | 2, 3, **5.5**, 7 | `plan/phase-8.md` — mapped only |
 | **9** | Indemnity waiver, emergency contact, POPIA review | 4, 6 | `plan/phase-9.md` — mapped only |
 
 **Your stated priority — a live headcount for the next class — lands at the end of Phase 2.**
+
+**Phase 5.5 was inserted 2026-08-10**, as the decimal keeps every existing `plan/phase-N.md`
+reference valid. It is not optional scenery: it was discovered while scoping a UI request
+(bookable extra classes) and turned out to be the same underlying problem as Phase 8 —
+both need a bookable *class occurrence* that is not a recurring weekly template. Phase 8
+gained a dependency on it and gets cheaper for it.
+
+**Not every piece of work is a phase.** Small UI/display batches get a plain feature branch
+and a `plan/feat-<name>.md` spec, reviewed the same way but without a phase number —
+see `plan/feat-schedule-ux.md` (2026-08-10). The test is whether it changes the schema or a
+write path; if it does, it is a phase.
 
 ---
 
